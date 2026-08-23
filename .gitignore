@@ -1,0 +1,13 @@
+.agent-reflection/
+.claude/
+.codegraph/
+dist/
+node_modules/
+.env
+tmp/
+source-lm-*.zip
+.DS_Store
+.env.*
+!.env.example
+*.zip
+.playwright-mcp/

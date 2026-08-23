@@ -1,0 +1,1108 @@
+:root {
+  color-scheme: light;
+  --bg: #f6f7f6;
+  --card: #ffffff;
+  --surface-2: #f0f2f0;
+  --surface-3: #fafbfa;
+  --border: #e5e8e5;
+  --border-strong: #dbe0dc;
+  --border-hover: #c8d0ca;
+  --fg: #16211c;
+  --muted: #6b7770;
+  --faint: #8a948e;
+  --dim: #9aa39d;
+  --accent: #0f7a52;
+  --accent-hover: #0c6644;
+  --accent-fg: #ffffff;
+  --accent-tint: #f4faf7;
+  --error-fg: #ba1a1a;
+  --error-bg: #ffdad6;
+  --error-strong: #93000a;
+  --warning-bg: #fffbeb;
+  --warning-border: #fde68a;
+  --warning-fg: #92400e;
+  --warning-icon: #d97706;
+  --ok-fg: #0d5c3e;
+  --ok-bg: #e8f3ee;
+  --code-bg: #f2f4f2;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Fixed column: the popup itself never scrolls, only `.pane` inside the
+   active tab panel does (the header, tabs, plan bar and each panel's
+   action bar stay pinned). */
+body {
+  width: 412px;
+  height: 600px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 12.5px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 4px;
+}
+
+/* Header, tabs */
+
+header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 46px;
+  padding: 0 12px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.brand svg {
+  flex-shrink: 0;
+}
+
+.brand span {
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--fg);
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+nav.tabs {
+  flex: none;
+  display: flex;
+  height: 38px;
+  padding: 0 6px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+
+nav.tabs button {
+  position: relative;
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  color: #7b857f;
+  font-size: 12.5px;
+  font-weight: 500;
+  transition: color 0.15s ease;
+}
+
+nav.tabs button:hover {
+  background: none;
+  color: var(--fg);
+}
+
+nav.tabs button[aria-selected="true"] {
+  color: var(--fg);
+  font-weight: 650;
+}
+
+/* 2px accent underline, inset from the tab's own edges, sitting on the
+   strip's bottom hairline. */
+nav.tabs button[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: -1px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+}
+
+main {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.tabpanel[hidden] {
+  display: none;
+}
+
+.tabpanel:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+/* The only scrolling area in the popup. */
+.pane {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+}
+
+.pane::-webkit-scrollbar {
+  width: 8px;
+}
+
+.pane::-webkit-scrollbar-thumb {
+  background: #d3d8d4;
+  border-radius: 4px;
+}
+
+/* Pinned bottom bar, one per tab. */
+.actionbar {
+  flex: none;
+  padding: 10px 12px;
+  background: var(--card);
+  border-top: 1px solid var(--border);
+}
+
+/* The YouTube/Link action bars act on the section that the pane hides when
+   the active tab isn't a YouTube / plain web page — hide the bar with it
+   instead of mirroring the state from popup.ts. */
+#panel-youtube:has(#section-youtube[hidden]) .actionbar,
+#panel-url:has(#section-url[hidden]) .actionbar {
+  display: none;
+}
+
+.local-note {
+  margin: 8px 0 0;
+  text-align: center;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--dim);
+}
+
+/* Sections are layout wrappers here — the cards inside them carry the frame. */
+
+h2 {
+  font-size: 10px;
+  line-height: 14px;
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin: 0 0 8px;
+}
+
+section {
+  margin: 0 0 14px;
+}
+
+/* A panel is the flex column itself, not a card in a stack — the 14px
+   rhythm belongs to the sections inside its pane. */
+.tabpanel,
+section:last-child {
+  margin-bottom: 0;
+}
+
+#tab-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  font-size: 11.5px;
+  font-weight: 550;
+  color: #7b857f;
+  white-space: nowrap;
+}
+
+#tab-status .dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #b3bab5;
+  flex-shrink: 0;
+}
+
+#tab-status.ok {
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+}
+
+#tab-status.ok .dot {
+  background: #1f9c69;
+}
+
+#tab-status.warn {
+  background: var(--warning-bg);
+  color: var(--warning-fg);
+}
+
+#tab-status.warn .dot {
+  background: var(--warning-icon);
+}
+
+#tab-status.off {
+  background: var(--surface-2);
+  color: #7b857f;
+}
+
+#tab-status.off .dot {
+  background: #b3bab5;
+}
+
+/* Form controls */
+
+input[type="text"],
+input[type="number"],
+input[type="url"],
+textarea,
+select {
+  width: 100%;
+  height: 34px;
+  padding: 6px 9px;
+  background: var(--card);
+  color: var(--fg);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 12.5px;
+}
+
+input[type="text"]:focus-visible,
+input[type="number"]:focus-visible,
+input[type="url"]:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+label {
+  display: block;
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--muted);
+}
+
+/* display:block above beats the UA [hidden] rule without this */
+label[hidden] {
+  display: none;
+}
+
+label.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--fg);
+}
+
+label.checkbox-row input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.hint {
+  margin: 4px 0 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--faint);
+}
+
+.pattern-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pattern-row input {
+  min-width: 0;
+}
+
+.pattern-fixed {
+  flex: none;
+  font-size: 11px;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.slider-row input[type="range"] {
+  flex: 1;
+  min-width: 0;
+}
+
+.slider-row output {
+  flex: none;
+  width: 84px;
+  text-align: right;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  color: var(--fg);
+}
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+  cursor: pointer;
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  background: var(--accent-hover);
+}
+
+input[type="range"]::-moz-range-thumb:hover {
+  background: var(--accent-hover);
+}
+
+input[type="range"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Dropzone (file input) */
+
+.dropzone {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  margin-top: 0;
+  height: 104px;
+  padding: 12px;
+  background: var(--card);
+  border: 1.5px dashed var(--border-hover);
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: center;
+  color: var(--faint);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.dropzone:hover,
+.dropzone.dragover {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+}
+
+.dropzone-icon {
+  color: var(--faint);
+}
+
+.dropzone #file-name {
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--fg);
+}
+
+.dropzone #file-meta {
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.dropzone.has-file {
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 10px;
+  height: 40px;
+  padding: 0 10px;
+  border-width: 1px;
+  border-style: solid;
+  border-color: var(--border-strong);
+  border-radius: 9px;
+  background: var(--card);
+  text-align: left;
+}
+
+#json-file {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+}
+
+/* Buttons */
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pane .actions {
+  margin-top: 10px;
+}
+
+button {
+  height: 36px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  background: var(--card);
+  color: var(--fg);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+button:hover {
+  background: #f4f6f4;
+  border-color: var(--border-hover);
+}
+
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.actionbar button,
+.actionbar select {
+  height: 38px;
+}
+
+/* Primary (solid accent) */
+button#btn-upload,
+button#btn-add-youtube,
+button#btn-add-url,
+button#btn-continue,
+button#btn-get-pro {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+  font-weight: 600;
+}
+
+button#btn-upload:hover,
+button#btn-add-youtube:hover,
+button#btn-add-url:hover,
+button#btn-continue:hover,
+button#btn-get-pro:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+/* "Upload to Notebook" does not fit in half of the popup, so Preview takes
+   only what it needs and Upload gets the rest of the row. */
+button#btn-preview {
+  flex: 0 0 auto;
+}
+
+button#btn-upload {
+  flex: 1;
+  white-space: nowrap;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.icon-button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 7px;
+  color: var(--muted);
+}
+
+.icon-button.active {
+  color: var(--accent);
+  background: var(--accent-tint);
+  border-color: var(--accent);
+}
+
+input:disabled,
+select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button#btn-reset {
+  margin-top: 12px;
+  width: 100%;
+}
+
+/* Messages */
+
+.error {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: var(--error-bg);
+  color: var(--error-strong);
+  border-radius: 9px;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.error a {
+  color: inherit;
+  font-weight: 600;
+}
+
+.warnings {
+  margin-top: 8px;
+  padding: 10px;
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
+  color: var(--warning-fg);
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+.warnings a {
+  color: currentColor;
+  text-decoration: underline;
+}
+
+.warnings ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+/* Result section */
+
+#preview-summary {
+  font-size: 11.5px;
+  color: var(--faint);
+  margin-bottom: 8px;
+}
+
+#preview-files {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+#preview-files li {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+}
+
+.file-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  word-break: break-all;
+}
+
+.file-snippet {
+  margin: 0;
+  background: var(--code-bg);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 17px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Static empty state — hidden by CSS as soon as either a preview or an
+   upload has put something in the section (no TS state involved). */
+.result-empty {
+  padding: 12px;
+  border: 1px dashed #dde1de;
+  border-radius: 9px;
+  text-align: center;
+}
+
+.result-empty-title {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--faint);
+}
+
+.result-empty-sub {
+  margin: 3px 0 0;
+  font-size: 10.5px;
+  color: var(--dim);
+}
+
+#section-result:has(#preview-files li) .result-empty,
+#section-result:has(#upload-result *) .result-empty,
+#section-result:has(#upload-progress-wrap:not([hidden])) .result-empty {
+  display: none;
+}
+
+progress {
+  width: 100%;
+  height: 6px;
+  border: none;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+
+progress::-webkit-progress-bar {
+  background: var(--surface-2);
+  border-radius: 999px;
+}
+
+progress::-webkit-progress-value {
+  background: var(--accent);
+  border-radius: 999px;
+}
+
+#upload-progress-text,
+#upload-result {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+#upload-progress-text:not(:empty),
+#upload-result:not(:empty) {
+  margin-top: 6px;
+  margin-bottom: 8px;
+}
+
+#upload-result p.done {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#upload-result p.done::before {
+  content: "\2713";
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+#upload-confirm-wrap {
+  margin-top: 8px;
+  padding: 10px;
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
+  color: var(--warning-fg);
+  border-radius: 10px;
+}
+
+.confirm-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.confirm-row svg {
+  flex-shrink: 0;
+  color: var(--warning-icon);
+  margin-top: 1px;
+}
+
+#upload-confirm-wrap p {
+  margin: 0;
+  font-size: 12px;
+}
+
+#upload-confirm-wrap button#btn-continue {
+  display: block;
+  margin: 10px 0 0 auto;
+}
+
+/* YouTube */
+
+.yt-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+#btn-collect-videos {
+  width: calc(100% - 20px);
+  margin: 10px 10px 0;
+}
+
+.yt-card > .hint {
+  margin: 8px 10px;
+}
+
+.yt-card > .error {
+  margin: 8px 10px;
+}
+
+.yt-list-actions {
+  padding: 0 10px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.yt-list-actions .checkbox-row {
+  margin: 0;
+  gap: 8px;
+}
+
+#youtube-video-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+#youtube-video-list li {
+  border-top: 1px solid #eef0ee;
+}
+
+#youtube-video-list li:first-child {
+  border-top: none;
+}
+
+#youtube-video-list label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  padding: 8px 10px;
+  color: var(--fg);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+#youtube-video-list label:hover {
+  background: var(--surface-3);
+}
+
+/* Selected rows read as a group without a second control. */
+#youtube-video-list li:has(input:checked) {
+  background: var(--accent-tint);
+}
+
+/* The striped placeholder lives on the <img> itself, so a thumbnail that is
+   still loading keeps the row's rhythm. popup.ts removes the element on a
+   load error — the row then closes up, which is the intended degradation
+   (no extra DOM to keep the 46px gap). */
+.yt-thumb {
+  flex: none;
+  width: 46px;
+  height: 28px;
+  border-radius: 5px;
+  object-fit: cover;
+  background: repeating-linear-gradient(135deg, #e9ece9 0 4px, #f2f4f2 4px 8px);
+}
+
+.yt-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.35;
+}
+
+#section-youtube input[type="checkbox"] {
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+
+#youtube-comments-row {
+  margin-top: 12px;
+  padding: 10px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+#youtube-comments-row > label:first-child {
+  margin-top: 0;
+}
+
+#btn-add-comments {
+  width: 100%;
+  margin-top: 10px;
+}
+
+#youtube-notebook-select {
+  flex: 1;
+  min-width: 0;
+}
+
+#btn-add-youtube {
+  flex: none;
+}
+
+#youtube-new-notebook-row:not([hidden]),
+#url-new-notebook-row:not([hidden]) {
+  margin-top: 0;
+  margin-bottom: 8px;
+}
+
+#youtube-status,
+#url-status {
+  margin-top: 8px;
+  min-height: 1em;
+  text-align: center;
+  font-size: 10.5px;
+  color: var(--dim);
+}
+
+/* Spinner in front of the status text while the comments harvest runs. */
+#youtube-status.busy::before {
+  content: '';
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  vertical-align: -1px;
+  border: 2px solid var(--surface-2);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Shown instead of the section when the active tab is not youtube.com
+   (#youtube-unavailable) or not a plain http(s) page (#url-unavailable). */
+#youtube-unavailable,
+#url-unavailable {
+  margin: 0;
+  padding: 24px 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  text-align: center;
+}
+
+/* Link tab */
+
+.url-field {
+  padding: 12px;
+}
+
+/* The URL field is a textarea (a pasted list, one URL per line), so it opts
+   out of the fixed control height above. */
+#url-input {
+  height: auto;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.url-field label:first-of-type {
+  margin-top: 0;
+}
+
+#url-notebook {
+  height: 36px;
+}
+
+#btn-add-url {
+  flex: 1;
+}
+
+#btn-add-page {
+  flex: none;
+}
+
+/* Slim free-plan bar under the tab strip, shown on every tab while not Pro */
+
+#plan-bar {
+  flex: none;
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+#plan-bar:not([hidden]) {
+  display: flex;
+}
+
+#plan-bar-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#plan-bar-pro,
+#plan-bar-activate {
+  flex: none;
+  height: auto;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+#plan-bar-pro:hover,
+#plan-bar-activate:hover {
+  background: none;
+  color: var(--accent-hover);
+}
+
+/* Plan / license block (card in the Settings panel, opened from the gear icon in the header) */
+
+#plan-block {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+}
+
+#plan-status {
+  font-size: 12.5px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+#btn-get-pro {
+  width: 100%;
+}
+
+#license-activate {
+  margin-top: 8px;
+}
+
+#license-activate summary {
+  cursor: pointer;
+  font-size: 11.5px;
+  color: var(--faint);
+}
+
+#license-activate .pattern-row {
+  margin-top: 8px;
+}
+
+#license-msg {
+  min-height: 1em;
+}
+
+#btn-deactivate-license {
+  width: 100%;
+}
+
+/* Advanced disclosure */
+
+details#settings-advanced {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0 12px;
+  overflow: hidden;
+}
+
+details#settings-advanced summary {
+  list-style: none;
+  margin: 0 -12px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--fg);
+  border-bottom: 1px solid transparent;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+details#settings-advanced summary:hover {
+  background: var(--surface-3);
+}
+
+details#settings-advanced summary::-webkit-details-marker {
+  display: none;
+}
+
+details#settings-advanced summary .caret {
+  color: var(--faint);
+  transition: transform 0.15s ease;
+}
+
+details#settings-advanced[open] summary {
+  background: var(--surface-3);
+  border-bottom-color: var(--border);
+}
+
+details#settings-advanced[open] summary .caret {
+  transform: rotate(90deg);
+}
+
+details#settings-advanced[open] {
+  padding-bottom: 12px;
+}

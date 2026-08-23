@@ -1,0 +1,19 @@
+{
+  "name": "source-lm",
+  "version": "1.0.0",
+  "private": true,
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "type": "module",
+  "description": "Chrome MV3 extension: JSON -> Markdown sources -> upload to Notebook",
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "test": "node --test test/convert.test.mjs",
+    "package": "npm run build && VERSION=$(node -p \"require('./manifest.json').version\") && rm -f \"source-lm-v$VERSION.zip\" && zip -r \"source-lm-v$VERSION.zip\" manifest.json icons dist src/popup/popup.html src/popup/popup.css"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.2.6",
+    "esbuild": "^0.25.12",
+    "typescript": "^5.6.0"
+  }
+}

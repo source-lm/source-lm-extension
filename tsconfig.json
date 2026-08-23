@@ -2,6 +2,8 @@
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    // TypeScript 7 no longer auto-includes @types/* under this config.
+    "types": ["chrome"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "strict": true,

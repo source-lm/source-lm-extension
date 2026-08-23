@@ -1,0 +1,12 @@
+version: 2
+updates:
+  # Actions are pinned to SHAs in the workflows; without this they never move.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly

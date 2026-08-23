@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Source LM",
   "version": "1.0.0",
-  "description": "Adds sources to your open Gemini Notebook (NotebookLM) tab, from a JSON file, YouTube videos, or a link or the current page, without downloading files first.",
+  "description": "Bulk-add sources to NotebookLM and Gemini Notebook: JSON datasets, YouTube videos, link lists, web pages.",
   "permissions": ["activeTab", "storage", "scripting", "contextMenus"],
   "host_permissions": [
     "https://notebooklm.google.com/*",

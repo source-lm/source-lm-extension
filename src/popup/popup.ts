@@ -11,7 +11,6 @@ import {
   PRICE_LABEL,
   CHECKOUT_URL,
   FREE_QUOTA,
-  loadLicense,
   activateLicense,
   deactivateLicense,
   isPro,
@@ -1055,8 +1054,8 @@ async function requireProOrTrial(message: string, errEl: HTMLElement): Promise<b
 async function refreshPlanBadge(): Promise<void> {
   const pro = await isPro();
   if (pro) {
-    const state = await loadLicense();
-    planStatus.textContent = state?.email ? `Pro — ${state.email}` : 'Pro';
+    // No buyer email to show: Polar's license responses carry ids only.
+    planStatus.textContent = 'Pro';
     planFree.hidden = true;
     planPro.hidden = false;
     planBar.hidden = true;
@@ -1106,10 +1105,10 @@ btnDeactivateLicense.addEventListener('click', async () => {
   if (!confirm('Deactivate this device? You will need to activate again to use Pro features.')) return;
   const res = await deactivateLicense();
   await refreshPlanBadge();
-  // The local state is cleared either way; if Lemon Squeezy never heard the
-  // request, the activation slot is still taken and the user has to free it
-  // from the purchase email's license page.
-  licenseMsg.textContent = res.ok ? '' : `✗ Deactivated here, but Lemon Squeezy reported: ${res.error}`;
+  // The local state is cleared either way; if Polar never heard the request,
+  // the activation slot is still taken and the user has to free it from the
+  // customer portal linked in their purchase email.
+  licenseMsg.textContent = res.ok ? '' : `✗ Deactivated here, but Polar reported: ${res.error}`;
 });
 
 // ---- init -----------------------------------------------------------------

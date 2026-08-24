@@ -10,17 +10,16 @@ The short version, so a reader here is not left empty-handed:
   crash reporting, no remote code.
 - Sources go to `notebooklm.google.com` / `notebook.google.com` and the Google
   upload host they hand back, in the session you are already signed into.
-- A Pro licence check goes to `api.lemonsqueezy.com`, carrying the licence key
-  and a per-device instance — no notebook content, no source URLs, no Google
+- A Pro licence check goes to `api.polar.sh`, carrying the licence key and a
+  per-device activation id — no notebook content, no source URLs, no Google
   session data, cookies omitted.
 - The video list in the popup shows thumbnails as plain `<img>` tags from
   `https://i.ytimg.com/vi/<videoId>/default.jpg` — only the id of a video
   already on the YouTube page you are looking at, none of our cookies, no
   notebook content, no Google session data.
 - Those two are the only outbound requests besides the notebook upload itself.
-- Settings, the `license` state (the licence key, its Lemon Squeezy
-  instance id, and the purchase email Lemon Squeezy returns), and the
-  `trial` counter live in `chrome.storage.sync` (which Chrome syncs to your
+- Settings, the `license` state (the licence key and its Polar activation
+  id), and the `trial` counter live in `chrome.storage.sync` (which Chrome syncs to your
   own Google account); a
   YouTube/link job and the broken-source hand-off (`fixQueue`) sit briefly in
   `chrome.storage.local` and are deleted on read or after 5 minutes; a cache of
@@ -28,7 +27,7 @@ The short version, so a reader here is not left empty-handed:
   the YouTube dialog, and the right-click submenu.
 - Permissions: `activeTab`, `storage`, `scripting`, `contextMenus`, and host
   access limited to `notebooklm.google.com`, `notebook.google.com`,
-  `www.youtube.com`, and `api.lemonsqueezy.com`. No `tabs`, no `<all_urls>`.
+  `www.youtube.com`, and `api.polar.sh`. No `tabs`, no `<all_urls>`.
   The only background service worker registers the «Add selection to Notebook»
   menu item and hands the selection to the notebook tab — no queue, no data of
   its own, no network requests.

@@ -15,7 +15,8 @@ permissions:
 env:
   SOURCE_LM_PRICE_LABEL: ${{ vars.SOURCE_LM_PRICE_LABEL }}
   SOURCE_LM_CHECKOUT_URL: ${{ vars.SOURCE_LM_CHECKOUT_URL }}
-  SOURCE_LM_VARIANT_ID: ${{ vars.SOURCE_LM_VARIANT_ID }}
+  SOURCE_LM_POLAR_ORG_ID: ${{ vars.SOURCE_LM_POLAR_ORG_ID }}
+  SOURCE_LM_POLAR_API: ${{ vars.SOURCE_LM_POLAR_API }}
   SOURCE_LM_FREE_QUOTA: ${{ vars.SOURCE_LM_FREE_QUOTA }}
 
 jobs:
@@ -51,13 +52,15 @@ jobs:
 
       # Storefront values are public (they end up in dist/popup.js) but must be
       # the LIVE ones: without them license.ts falls back to REPLACE-ME and an
-      # empty variant id, which disables the cross-product license check.
-      - name: Require live Lemon Squeezy values (repo Variables)
+      # empty organization id, and every license call 422s. A sandbox API base
+      # would ship a build that only accepts sandbox keys, so it must be empty.
+      - name: Require live Polar values (repo Variables)
         run: |
           case "$SOURCE_LM_CHECKOUT_URL" in
             ''|*REPLACE-ME*) echo "Set repo variable SOURCE_LM_CHECKOUT_URL" >&2; exit 1;;
           esac
-          [ -n "$SOURCE_LM_VARIANT_ID" ] || { echo "Set repo variable SOURCE_LM_VARIANT_ID" >&2; exit 1; }
+          [ -n "$SOURCE_LM_POLAR_ORG_ID" ] || { echo "Set repo variable SOURCE_LM_POLAR_ORG_ID" >&2; exit 1; }
+          [ -z "$SOURCE_LM_POLAR_API" ] || { echo "SOURCE_LM_POLAR_API must be empty for a release (sandbox build)" >&2; exit 1; }
 
       - run: npm run build
 

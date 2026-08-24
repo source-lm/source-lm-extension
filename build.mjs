@@ -9,10 +9,11 @@ try {
 const ENV_KEYS = [
   'SOURCE_LM_PRICE_LABEL',
   'SOURCE_LM_CHECKOUT_URL',
-  'SOURCE_LM_VARIANT_ID',
+  'SOURCE_LM_POLAR_ORG_ID',
+  'SOURCE_LM_POLAR_API',
   'SOURCE_LM_FREE_QUOTA',
 ];
-// All four must be defined unconditionally — an undefined one leaves a bare
+// All of them must be defined unconditionally — an undefined one leaves a bare
 // `process` reference in the bundle, which throws in the browser.
 const define = Object.fromEntries(
   ENV_KEYS.map((k) => [`process.env.${k}`, JSON.stringify(process.env[k] ?? '')]),

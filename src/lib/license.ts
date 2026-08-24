@@ -3,7 +3,6 @@ export interface LicenseState {
   instanceId: string;
   valid: boolean;
   checkedAt: number;
-  email?: string;
 }
 
 // @types/node isn't installed (tsconfig only covers src) — declare the shape
@@ -17,17 +16,23 @@ declare const process: { env: Record<string, string | undefined> };
 // expression, so aliasing it (`const env = process.env`) would NOT be
 // substituted and would leave a live `process` read in the bundle.
 export const PRICE_LABEL = process.env.SOURCE_LM_PRICE_LABEL || '$29';
-// Placeholder — replace once the Lemon Squeezy product/checkout exists.
+// Placeholder — replace with the Checkout Link copied from the Polar
+// dashboard (its host differs between sandbox and production).
 export const CHECKOUT_URL =
-  process.env.SOURCE_LM_CHECKOUT_URL || 'https://REPLACE-ME.lemonsqueezy.com/checkout/buy/REPLACE-ME';
-// Public store/product identifier used to reject a license bought for a
-// different product in the same Lemon Squeezy store. '' skips the check.
-export const LS_VARIANT_ID = process.env.SOURCE_LM_VARIANT_ID || '';
+  process.env.SOURCE_LM_CHECKOUT_URL || 'https://polar.sh/REPLACE-ME';
+// Polar requires the organization id in every license call: without it a key
+// issued by any other Polar seller would validate here.
+export const POLAR_ORG_ID = process.env.SOURCE_LM_POLAR_ORG_ID || '';
 
 export const REVALIDATE_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 export const GRACE_MS = 30 * 24 * 60 * 60 * 1000;
 
-const LS_API = 'https://api.lemonsqueezy.com/v1/licenses';
+// sandbox-api.polar.sh during testing; a sandbox key is invalid in production
+// and vice versa, so this and POLAR_ORG_ID must always be switched together.
+// The sandbox host is deliberately absent from manifest.json host_permissions
+// (a domain the shipped build never calls is a CWS review question), so testing
+// against it means re-adding it there for the duration.
+const POLAR_API = (process.env.SOURCE_LM_POLAR_API || 'https://api.polar.sh') + '/v1/customer-portal/license-keys';
 
 function getChromeStorage(): any {
   return (globalThis as any).chrome?.storage;
@@ -65,39 +70,47 @@ function instanceName(): string {
   return `Source LM — Chrome on ${os}`;
 }
 
-// All Lemon Squeezy calls happen from the popup only — a content script
-// inherits the NotebookLM/YouTube page origin and would be CORS-blocked by
-// api.lemonsqueezy.com even with host_permissions.
-async function callLicenseApi(endpoint: string, params: Record<string, string>): Promise<any> {
-  const res = await fetch(`${LS_API}/${endpoint}`, {
+// All Polar calls happen from the popup only — a content script inherits the
+// NotebookLM/YouTube page origin and would be CORS-blocked by api.polar.sh
+// even with host_permissions.
+//
+// Returns the HTTP status alongside the body: unlike Lemon Squeezy, Polar
+// answers "no such key" with 404 and an empty-ish error body, so the status is
+// the only thing that separates "definitely invalid" from "we could not ask".
+async function callLicenseApi(
+  endpoint: string,
+  params: Record<string, unknown>,
+): Promise<{ status: number; body: any }> {
+  const res = await fetch(`${POLAR_API}/${endpoint}`, {
     method: 'POST',
     // Explicit: no cookies of any kind travel to the merchant (decision #10).
     credentials: 'omit',
     headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
+      'Content-Type': 'application/json',
       Accept: 'application/json',
     },
-    body: new URLSearchParams(params),
+    body: JSON.stringify({ ...params, organization_id: POLAR_ORG_ID }),
   });
-  return res.json();
+  // 204 on deactivate, and an error body is not guaranteed to be JSON.
+  const body = await res.json().catch(() => null);
+  return { status: res.status, body };
+}
+
+function apiErrorMessage(status: number, body: any): string {
+  if (status === 404) return 'License key not found';
+  if (status === 403) return 'Activation limit reached — deactivate this key on another device first';
+  const detail = body?.detail;
+  return (typeof detail === 'string' && detail) || body?.error || `Activation failed (HTTP ${status})`;
 }
 
 export async function activateLicense(key: string): Promise<{ ok: boolean; error?: string; state?: LicenseState }> {
   try {
-    const resp = await callLicenseApi('activate', { license_key: key, instance_name: instanceName() });
-    if (!resp?.activated || !resp.instance?.id) {
-      return { ok: false, error: resp?.error ?? 'Activation failed' };
-    }
-    if (LS_VARIANT_ID && String(resp.meta?.variant_id) !== LS_VARIANT_ID) {
-      return { ok: false, error: 'invalid_product' };
-    }
-    const state: LicenseState = {
-      key,
-      instanceId: resp.instance.id,
-      valid: true,
-      checkedAt: Date.now(),
-      email: resp.meta?.customer_email,
-    };
+    const { status, body } = await callLicenseApi('activate', { key, label: instanceName() });
+    if (status !== 200 || !body?.id) return { ok: false, error: apiErrorMessage(status, body) };
+    if (body.license_key?.status !== 'granted') return { ok: false, error: 'This license key is no longer active' };
+    // Polar's activation id, not the key id: validate and deactivate both
+    // want it back, and it is what the activation limit counts.
+    const state: LicenseState = { key, instanceId: body.id, valid: true, checkedAt: Date.now() };
     await saveLicense(state);
     return { ok: true, state };
   } catch (e) {
@@ -109,12 +122,14 @@ export async function deactivateLicense(): Promise<{ ok: boolean; error?: string
   const s = await loadLicense();
   if (!s) return { ok: false, error: 'No license stored' };
   try {
-    const resp = await callLicenseApi('deactivate', { license_key: s.key, instance_id: s.instanceId });
+    const { status, body } = await callLicenseApi('deactivate', { key: s.key, activation_id: s.instanceId });
     await clearLicense();
-    if (!resp?.deactivated) return { ok: false, error: resp?.error ?? 'Deactivation failed' };
+    // 204 No Content on success; 404 means Polar already lost the activation,
+    // which is the state the user asked for anyway.
+    if (status >= 400 && status !== 404) return { ok: false, error: apiErrorMessage(status, body) };
     return { ok: true };
   } catch (e) {
-    // The key is dead to us locally regardless of whether LS heard the request.
+    // The key is dead to us locally regardless of whether Polar heard us.
     await clearLicense();
     return { ok: false, error: String((e as Error)?.message ?? e) };
   }
@@ -124,35 +139,48 @@ export function shouldRevalidate(s: LicenseState | null, now: number): boolean {
   return !!s && now - s.checkedAt > REVALIDATE_AFTER_MS;
 }
 
-// Pure fail-open rule: an unknown result (network/parse/HTTP failure, modeled
-// as resp being null or missing `valid`) keeps the previous valid/checkedAt
-// until GRACE_MS has elapsed, so a paid feature never dies just because the
-// user is offline.
-export function applyValidateResult(s: LicenseState, resp: unknown, now: number): LicenseState {
-  const r = resp as { valid?: boolean; license_key?: { status?: string } } | null;
-  if (r && typeof r.valid === 'boolean') {
-    const bad = !r.valid || r.license_key?.status === 'expired' || r.license_key?.status === 'disabled';
-    return { ...s, valid: !bad, checkedAt: now };
-  }
+export type Verdict = 'valid' | 'invalid' | 'unknown';
+
+// Pure: turns one Polar answer into a verdict. Only a 404/403 — the key or its
+// activation is gone, or it belongs to another organization — is a definitive
+// no. A 5xx, a rate limit or an unparseable body is 'unknown' and must not
+// revoke anything (see applyValidateResult).
+export function licenseVerdict(status: number, body: any, now: number): Verdict {
+  if (status === 404 || status === 403) return 'invalid';
+  if (status !== 200 || !body) return 'unknown';
+  if (body.status !== 'granted') return 'invalid';
+  // Expiry is disabled on the product, but a key issued before that (or a
+  // future dated product) would otherwise stay Pro forever on our side.
+  if (body.expires_at && Date.parse(body.expires_at) <= now) return 'invalid';
+  return 'valid';
+}
+
+// Pure fail-open rule: an 'unknown' verdict (network/HTTP failure) keeps the
+// previous valid/checkedAt until GRACE_MS has elapsed, so a paid feature never
+// dies just because the user is offline.
+export function applyValidateResult(s: LicenseState, verdict: Verdict, now: number): LicenseState {
+  if (verdict !== 'unknown') return { ...s, valid: verdict === 'valid', checkedAt: now };
   if (now - s.checkedAt <= GRACE_MS) return s;
   return { ...s, valid: false, checkedAt: now };
 }
 
 async function revalidate(s: LicenseState): Promise<void> {
-  let resp: unknown = null;
+  const now = Date.now();
+  let verdict: Verdict = 'unknown';
   try {
-    resp = await callLicenseApi('validate', { license_key: s.key, instance_id: s.instanceId });
+    const { status, body } = await callLicenseApi('validate', { key: s.key, activation_id: s.instanceId });
+    verdict = licenseVerdict(status, body, now);
   } catch {
-    resp = null;
+    verdict = 'unknown';
   }
-  await saveLicense(applyValidateResult(s, resp, Date.now()));
+  await saveLicense(applyValidateResult(s, verdict, now));
 }
 
 // isPro() is called from both the popup and content scripts (this file has
 // no DOM/chrome-API restriction otherwise). Revalidation must stay
-// popup-only: from a content script the fetch to api.lemonsqueezy.com is
+// popup-only: from a content script the fetch to api.polar.sh is
 // always CORS-blocked (no allowance for page origins), and the failure path
-// (applyValidateResult with a null resp) would, after GRACE_MS, flip a
+// (applyValidateResult with an 'unknown' verdict) would, after GRACE_MS, flip a
 // perfectly valid license to invalid for no reason but running on the wrong
 // page. The extension's own pages (popup, options) load over
 // chrome-extension:, content scripts inherit the host page's origin.

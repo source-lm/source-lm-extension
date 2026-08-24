@@ -17,7 +17,7 @@ const result = esbuild.buildSync({
       export { buildFiles, uploadedState } from './chunker';
       export { DEFAULT_SETTINGS, patternPrefix, patternFromPrefix } from './settings';
       export { recordCursor, recordsAfter } from './cursor';
-      export { shouldRevalidate, applyValidateResult, GRACE_MS, REVALIDATE_AFTER_MS } from './license';
+      export { shouldRevalidate, applyValidateResult, licenseVerdict, GRACE_MS, REVALIDATE_AFTER_MS } from './license';
       export { monthKey, trialLeft, spendTrial, FREE_QUOTA, loadTrial } from './license';
       export { parseUrlList } from './url-list';
       export { pageToMarkdown, captureFilename } from './capture';
@@ -48,6 +48,7 @@ const {
   recordsAfter,
   shouldRevalidate,
   applyValidateResult,
+  licenseVerdict,
   GRACE_MS,
   REVALIDATE_AFTER_MS,
   monthKey,
@@ -888,35 +889,50 @@ test('license: shouldRevalidate is false for a null state', () => {
   assert.equal(shouldRevalidate(null, Date.now()), false);
 });
 
-test('license: applyValidateResult flips to invalid on an explicit valid:false', () => {
+test('license: licenseVerdict reads a 404 (unknown key or wrong organization) as a definitive no', () => {
+  assert.equal(licenseVerdict(404, { error: 'ResourceNotFound' }, Date.now()), 'invalid');
+});
+
+test('license: licenseVerdict reads a revoked key as invalid, a granted one as valid', () => {
+  const now = Date.now();
+  assert.equal(licenseVerdict(200, { status: 'revoked' }, now), 'invalid');
+  assert.equal(licenseVerdict(200, { status: 'granted' }, now), 'valid');
+});
+
+test('license: licenseVerdict honours expires_at even while the key still reads granted', () => {
+  const now = Date.now();
+  assert.equal(licenseVerdict(200, { status: 'granted', expires_at: new Date(now - 1000).toISOString() }, now), 'invalid');
+  assert.equal(licenseVerdict(200, { status: 'granted', expires_at: new Date(now + 1000).toISOString() }, now), 'valid');
+});
+
+test('license: licenseVerdict treats a server error or unparseable body as unknown, not as a revocation', () => {
+  const now = Date.now();
+  assert.equal(licenseVerdict(500, null, now), 'unknown');
+  assert.equal(licenseVerdict(429, { detail: 'slow down' }, now), 'unknown');
+  assert.equal(licenseVerdict(200, null, now), 'unknown');
+});
+
+test('license: applyValidateResult flips to invalid on an invalid verdict', () => {
   const now = Date.now();
   const s = { key: 'k', instanceId: 'i', valid: true, checkedAt: now - 1000 };
-  const next = applyValidateResult(s, { valid: false, error: 'not found' }, now);
+  const next = applyValidateResult(s, 'invalid', now);
   assert.equal(next.valid, false);
   assert.equal(next.checkedAt, now);
 });
 
-test('license: applyValidateResult flips to invalid on status disabled', () => {
-  const now = Date.now();
-  const s = { key: 'k', instanceId: 'i', valid: true, checkedAt: now - 1000 };
-  const next = applyValidateResult(s, { valid: true, license_key: { status: 'disabled' } }, now);
-  assert.equal(next.valid, false);
-  assert.equal(next.checkedAt, now);
-});
-
-test('license: applyValidateResult fails open on an unknown result within the grace window', () => {
+test('license: applyValidateResult fails open on an unknown verdict within the grace window', () => {
   const now = Date.now();
   const checkedAt = now - GRACE_MS + 1000;
   const s = { key: 'k', instanceId: 'i', valid: true, checkedAt };
-  const next = applyValidateResult(s, null, now);
+  const next = applyValidateResult(s, 'unknown', now);
   assert.equal(next.valid, true);
   assert.equal(next.checkedAt, checkedAt, 'checkedAt must not move while still within grace');
 });
 
-test('license: applyValidateResult flips to invalid on an unknown result past the grace window', () => {
+test('license: applyValidateResult flips to invalid on an unknown verdict past the grace window', () => {
   const now = Date.now();
   const s = { key: 'k', instanceId: 'i', valid: true, checkedAt: now - GRACE_MS - 1000 };
-  const next = applyValidateResult(s, null, now);
+  const next = applyValidateResult(s, 'unknown', now);
   assert.equal(next.valid, false);
 });
 

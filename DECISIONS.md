@@ -19,9 +19,9 @@ the code looks the way it does, not at a style preference.
   `parser.ts` (JSON → array of records) → `schema-detector.ts` (title/
   content/date/tags/metadata fields) → `markdown-generator.ts` (record →
   `.md`) → `chunker.ts` (packing records into files by word budget) +
-  `settings.ts` (`chrome.storage.sync`, defaults) + `license.ts` (Lemon
-  Squeezy License API calls and the `chrome.storage.sync` `license`
-  state — see decision #15).
+  `settings.ts` (`chrome.storage.sync`, defaults) + `license.ts` (Polar
+  license API calls and the `chrome.storage.sync` `license` state —
+  see decision #15).
 - `src/popup/popup.ts` — vanilla TS, no framework. Reads/writes the
   settings form, calls `lib/*` for Preview, sends
   `chrome.tabs.sendMessage` to the content script for Upload and for the
@@ -76,7 +76,7 @@ the code looks the way it does, not at a style preference.
   `permissions: ["activeTab", "storage", "scripting", "contextMenus"]`,
   `host_permissions` — both NotebookLM/Gemini Notebook domains
   (`notebooklm.google.com`, `notebook.google.com`), `youtube.com`, and
-  `api.lemonsqueezy.com` (License API calls from the popup, see decision
+  `api.polar.sh` (license API calls from the popup, see decision
   #15). `scripting` is requested only for reading page text:
   the current-page capture button on the popup's third tab and the
   «Add selection to Notebook» context menu
@@ -271,22 +271,27 @@ the code looks the way it does, not at a style preference.
     `sources-ui.ts` deletes nothing at all — it only unchecks every row
     and re-checks the duplicates, so deletion still goes through this
     button and its `confirm()`.
-15. **Licensing calls the Lemon Squeezy License API directly from the
+15. **Licensing calls Polar's public license API directly from the
     popup — no backend, no merchant API key in the bundle.**
-    `src/lib/license.ts` hits `activate`/`validate`/`deactivate` on
-    `api.lemonsqueezy.com` with `credentials: 'omit'`; those three
-    endpoints are unauthenticated by design (the license key itself is
-    the credential), so there is nothing for a server to guard and
-    nothing consistent with decision #10 to add. No Cloudflare Worker
-    and no signed JWT — that would mean hosting a service to protect a
-    check that's removable from public source anyway (this repo is
-    source-available), pure overhead for no real security gain. Zero
-    runtime dependencies (decision #7) stands: no `jose`, no JWT
-    verification, nothing to add. The check is **fail-open with a
-    30-day grace window** — a network hiccup or Lemon Squeezy being down
-    must never revoke a paid feature; only an explicit invalid response
-    from Lemon Squeezy does that. Cutting Pro off on a flaky connection
-    is worse than a month of accidental free use. The gate is
+    `src/lib/license.ts` hits `activate`/`validate`/`deactivate` under
+    `api.polar.sh/v1/customer-portal/license-keys` with
+    `credentials: 'omit'`; those three endpoints are unauthenticated by
+    design (the license key itself is the credential), so there is
+    nothing for a server to guard and nothing consistent with decision
+    #10 to add. Every call carries `organization_id` — Polar scopes keys
+    per organization, and without it a key bought from any other Polar
+    seller would validate here. A merchant whose validation needs a
+    secret API key is disqualified by decision #10, not by price. The
+    check is **fail-open with a 30-day grace window** — a network
+    hiccup or Polar being down must
+    never revoke a paid feature; only a definitive rejection does that.
+    With Polar the distinction is an HTTP status, not a field in the
+    body: an unknown key answers `404`, so `licenseVerdict()` maps
+    404/403 to `invalid`, a `granted` status (unexpired) to `valid`, and
+    everything else — 5xx, rate limits, an unparseable body, a thrown
+    fetch — to `unknown`, which is what the grace window protects.
+    Cutting Pro off on a flaky connection is worse than a month of
+    accidental free use. The gate is
     check-then-commit, and the rule is one sentence no matter which
     surface triggers it: more than one source added in a single action is
     metered/Pro, a single source is always free. That rule is checked at
@@ -315,7 +320,7 @@ the code looks the way it does, not at a style preference.
     to the quota as-is: a `storage.sync` counter is exactly as removable
     from public source as the license check, so a server to guard it
     would be the same overhead for the same non-gain. And license
-    fetches must never move into a content script: `api.lemonsqueezy.com`
+    fetches must never move into a content script: `api.polar.sh`
     has no CORS allowance for the notebook's/YouTube's origin, so
     `activate`/`validate`/`deactivate` only work from the popup.
     `isPro()`/`trialRemaining()`/`noteTrialUse()` themselves are fine to

@@ -183,17 +183,18 @@ JSON upload and selecting more than one YouTube video; the count resets on
 the 1st.
 
 **Pro** — the same bulk actions, unmetered. One-time purchase, **not a
-subscription**: pay once, keep the license. Sold through Lemon Squeezy; the
-"Get Pro" button in the popup opens the checkout with the current price.
+subscription**: pay once, keep the license. Sold through Polar, which is the
+merchant of record; the "Get Pro" button in the popup opens the checkout with
+the current price.
 
-To activate, paste the license key into the popup. The extension calls Lemon
-Squeezy's License API directly from your browser — no account, no sign-in,
-just the key. Moving to another browser: deactivate on the old device first
+To activate, paste the license key into the popup. The extension calls Polar's
+public license API directly from your browser — no account, no sign-in, just
+the key. Moving to another browser: deactivate on the old device first
 to free the slot.
 
 Validation runs on activation and roughly every 7 days. It **fails open** —
-if the network is down or Lemon Squeezy is unreachable, Pro keeps working
-(30-day grace window). Only an explicit "this key is invalid" turns it off.
+if the network is down or Polar is unreachable, Pro keeps working (30-day
+grace window). Only an explicit "this key is invalid" turns it off.
 Offline use is unaffected.
 
 ## Privacy
@@ -203,9 +204,9 @@ popup. Data leaves the extension only toward
 `notebooklm.google.com`/`notebook.google.com` — the service you're already
 signed into — and only after an explicit click. There is **no backend of
 ours**: no proxy, no logging server, no telemetry. Your Google session
-cookies never leave your browser. The only third-party call is to Lemon
-Squeezy's License API, and it carries nothing but the license key and an
-instance id.
+cookies never leave your browser. The only third-party call is to Polar's
+public license API, and it carries nothing but the license key and an
+activation id.
 
 Details of what is read and what is never collected: [`PRIVACY.md`](./PRIVACY.md).
 
@@ -277,12 +278,13 @@ from the submitted code.
 
 ### Releases
 
-Copy `.env.example` to `.env` and fill in the real Lemon Squeezy values
-before a release build (`npm run build` inlines them; without `.env` the
-fallbacks in `license.ts` apply). The release workflow reads the same values
-from repository Variables (`SOURCE_LM_CHECKOUT_URL`, `SOURCE_LM_VARIANT_ID`,
+Copy `.env.example` to `.env` and fill in the real Polar values before a
+release build (`npm run build` inlines them; without `.env` the fallbacks in
+`license.ts` apply). The release workflow reads the same values from
+repository Variables (`SOURCE_LM_CHECKOUT_URL`, `SOURCE_LM_POLAR_ORG_ID`,
 `SOURCE_LM_PRICE_LABEL`, `SOURCE_LM_FREE_QUOTA`) and refuses to build without
-them.
+them — or to build at all if `SOURCE_LM_POLAR_API` still points at the Polar
+sandbox.
 
 To cut one: bump the version to the same value in `manifest.json` and
 `package.json`, commit, `git tag vX.Y.Z && git push --tags`. GitHub Actions

@@ -900,7 +900,8 @@ progress::-webkit-progress-value {
 }
 
 #youtube-status,
-#url-status {
+#url-status,
+#json-status {
   margin-top: 8px;
   min-height: 1em;
   text-align: center;
@@ -908,8 +909,9 @@ progress::-webkit-progress-value {
   color: var(--dim);
 }
 
-/* Spinner in front of the status text while the comments harvest runs. */
-#youtube-status.busy::before {
+/* Spinner in front of the status text while the comments harvest / JSON preview build runs. */
+#youtube-status.busy::before,
+#json-status.busy::before {
   content: '';
   display: inline-block;
   width: 10px;

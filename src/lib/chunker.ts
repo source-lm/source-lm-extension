@@ -185,6 +185,34 @@ export function buildFiles(records: Rec[], f: DetectedFields, s: Settings, index
   return { files, totalChars, warnings };
 }
 
+// Groups files so each group's total markdown stays within maxBytes.
+// chrome.tabs.sendMessage has a hard IPC size ceiling — a single message
+// carrying tens of MB of markdown never arrives, and the sender's promise
+// rejects with a generic "could not reach" error that looks like a dead
+// content script. Sending files in size-bounded groups instead avoids it.
+// A single file already over maxBytes still gets its own group (per-file
+// size is bounded by WORD_LIMIT above, so this is just its own group, never
+// split or dropped).
+export function groupByBytes<T extends { markdown: string }>(files: T[], maxBytes: number): T[][] {
+  const groups: T[][] = [];
+  let current: T[] = [];
+  let currentBytes = 0;
+
+  for (const file of files) {
+    const bytes = file.markdown.length;
+    if (current.length > 0 && currentBytes + bytes > maxBytes) {
+      groups.push(current);
+      current = [];
+      currentBytes = 0;
+    }
+    current.push(file);
+    currentBytes += bytes;
+  }
+  if (current.length > 0) groups.push(current);
+
+  return groups;
+}
+
 function escRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

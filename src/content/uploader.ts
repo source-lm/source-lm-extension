@@ -24,7 +24,8 @@ import { installSourcesUi } from './sources-ui';
 type UploadFile = { filename: string; markdown: string };
 
 type IncomingMessage =
-  | { type: 'UPLOAD'; files: UploadFile[]; batchSize: number }
+  | { type: 'UPLOAD'; batchSize: number }
+  | { type: 'UPLOAD_CHUNK'; files: UploadFile[] }
   | { type: 'UPLOAD_CONTINUE' }
   | { type: 'GET_NOTEBOOKS' }
   | { type: 'GET_SOURCE_NAMES' };
@@ -335,6 +336,12 @@ async function uploadFileViaRpc(notebookId: string, file: UploadFile): Promise<v
 
 let uploading = false;
 
+// Files arrive from the popup in size-bounded UPLOAD_CHUNK messages (see
+// groupByBytes in chunker.ts — a single message with the whole payload can
+// exceed chrome.tabs.sendMessage's IPC size ceiling), accumulated here until
+// the popup sends UPLOAD to start the run.
+let pending: UploadFile[] = [];
+
 // DOM ladder over the range files[startIndex..total), in batches of
 // batchSize — the same logic that used to live in runUpload() before the
 // RPC path existed, extracted into its own function so it can be started
@@ -502,8 +509,14 @@ if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
   chrome.runtime.onMessage.addListener(
     (message: IncomingMessage, sender, sendResponse) => {
       if (sender.id !== chrome.runtime.id) return;
-      if (message?.type === 'UPLOAD') {
-        void runUpload(message.files, message.batchSize);
+      if (message?.type === 'UPLOAD_CHUNK') {
+        pending.push(...message.files);
+        sendResponse({ ok: true });
+      } else if (message?.type === 'UPLOAD') {
+        const files = pending;
+        pending = [];
+        void runUpload(files, message.batchSize);
+        sendResponse({ ok: true });
       } else if (message?.type === 'UPLOAD_CONTINUE') {
         continueResolve?.();
         continueResolve = null;

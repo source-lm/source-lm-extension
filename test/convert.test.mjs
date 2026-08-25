@@ -14,7 +14,7 @@ const result = esbuild.buildSync({
       export { parseJson } from './parser';
       export { detectFields } from './schema-detector';
       export { recordToMarkdown, recordTitle, slugify } from './markdown-generator';
-      export { buildFiles, uploadedState } from './chunker';
+      export { buildFiles, uploadedState, groupByBytes } from './chunker';
       export { DEFAULT_SETTINGS, patternPrefix, patternFromPrefix } from './settings';
       export { recordCursor, recordsAfter } from './cursor';
       export { shouldRevalidate, applyValidateResult, licenseVerdict, GRACE_MS, REVALIDATE_AFTER_MS } from './license';
@@ -41,6 +41,7 @@ const {
   slugify,
   buildFiles,
   uploadedState,
+  groupByBytes,
   DEFAULT_SETTINGS,
   patternPrefix,
   patternFromPrefix,
@@ -215,6 +216,31 @@ test('chunker: budget is measured on the rendered file, not raw content', () => 
       );
     }
   }
+});
+
+test('chunker: groupByBytes bounds group size, isolates oversized files, preserves order', () => {
+  const files = [
+    { filename: 'a.md', markdown: 'x'.repeat(40) },
+    { filename: 'b.md', markdown: 'x'.repeat(40) },
+    { filename: 'c.md', markdown: 'x'.repeat(90) }, // bigger than maxBytes alone
+    { filename: 'd.md', markdown: 'x'.repeat(30) },
+    { filename: 'e.md', markdown: 'x'.repeat(30) },
+  ];
+  const maxBytes = 70;
+  const groups = groupByBytes(files, maxBytes);
+
+  for (const group of groups) {
+    const total = group.reduce((a, f) => a + f.markdown.length, 0);
+    if (group.length > 1) assert.ok(total <= maxBytes, `group of ${group.length} exceeds maxBytes`);
+  }
+
+  const oversizedGroup = groups.find((g) => g.some((f) => f.filename === 'c.md'));
+  assert.equal(oversizedGroup.length, 1, 'oversized file must be alone in its group');
+
+  const flattened = groups.flat();
+  assert.deepEqual(flattened.map((f) => f.filename), files.map((f) => f.filename));
+
+  assert.deepEqual(groupByBytes([], maxBytes), []);
 });
 
 test('slugify: cyrillic and pure-punctuation input', () => {

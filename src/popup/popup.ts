@@ -2,7 +2,7 @@ import type { Settings, PreviewResult } from '../lib/types.js';
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, patternPrefix, patternFromPrefix } from '../lib/settings.js';
 import { parseJson } from '../lib/parser.js';
 import { detectFields } from '../lib/schema-detector.js';
-import { buildFiles, uploadedState } from '../lib/chunker.js';
+import { buildFiles, uploadedState, groupByBytes } from '../lib/chunker.js';
 import { recordsAfter } from '../lib/cursor.js';
 import { slugify } from '../lib/markdown-generator.js';
 import { parseUrlList } from '../lib/url-list.js';
@@ -55,6 +55,7 @@ const jsonFile = el<HTMLInputElement>('json-file');
 const inputError = el<HTMLDivElement>('input-error');
 const btnPreview = el<HTMLButtonElement>('btn-preview');
 const btnUpload = el<HTMLButtonElement>('btn-upload');
+const jsonStatus = el<HTMLParagraphElement>('json-status');
 
 const maxWordsInput = el<HTMLInputElement>('max_words_per_file');
 const maxWordsValue = el<HTMLOutputElement>('max_words_value');
@@ -278,68 +279,91 @@ btnPreview.addEventListener('click', async () => {
     return;
   }
 
-  let parsed, sourceName;
+  btnPreview.disabled = true;
+  jsonStatus.hidden = false;
+  jsonStatus.classList.add('busy');
+  jsonStatus.textContent = 'Processing…';
   try {
-    ({ records: parsed, sourceName } = parseJson(await file.text()));
-  } catch (err) {
-    showError(err instanceof Error ? err.message : String(err));
-    return;
-  }
+    // Let the browser paint the spinner before the synchronous parse/build
+    // work below blocks the main thread (large JSON files freeze the tab).
+    await new Promise(requestAnimationFrame);
 
-  const s = { ...settings, source_name: sourceName };
-  const fields = detectFields(parsed, s);
+    let parsed, sourceName;
+    try {
+      ({ records: parsed, sourceName } = parseJson(await file.text()));
+    } catch (err) {
+      showError(err instanceof Error ? err.message : String(err));
+      return;
+    }
 
-  // Incremental filtering is by record, not by filename: the filename
-  // depends on batch splitting (index/cursor/title_slug), and splitting
-  // changes with chunking settings. The source of truth is the notebook's
-  // source names, from which we recover the highest used {index} and the
-  // cursor of the last uploaded record (uploadedState is the inverse of
-  // makeFilename), not a local watermark (that goes out of sync from
-  // manually deleting sources, YouTube sources in the same notebook, two
-  // JSONs in one notebook, reinstalling — see the "No new records" bug with
-  // an empty notebook).
-  let toPack = parsed;
-  let indexOffset = 0;
-  const notes: string[] = [];
+    const s = { ...settings, source_name: sourceName };
+    const fields = detectFields(parsed, s);
 
-  if (settings.incremental) {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    const notebookId = tab?.url ? extractNotebookId(tab.url) : null;
-    if (!notebookId) {
-      notes.push('No notebook open in the active tab — showing all files');
-    } else {
-      try {
-        const res = await chrome.tabs.sendMessage(tab.id!, { type: 'GET_SOURCE_NAMES' });
-        if (res?.error || !Array.isArray(res?.names)) throw new Error(res?.error ?? 'no response');
-        const names: string[] = res.names;
-        const sourceSlug = s.source_name ? slugify(s.source_name) : '';
-        const { maxIndex, cursor } = uploadedState(names, s.filename_pattern, sourceSlug, parsed, fields);
-        indexOffset = maxIndex;
-        if (cursor) {
-          toPack = recordsAfter(parsed, fields, cursor);
-          const skipped = parsed.length - toPack.length;
-          if (skipped > 0) notes.push(`Skipped ${skipped} records — already in notebook (up to ${cursor})`);
-          if (toPack.length === 0) notes.push('No new records');
-        } else if (names.length > 0) {
-          notes.push('No matches with already uploaded files — everything will be uploaded');
+    // Incremental filtering is by record, not by filename: the filename
+    // depends on batch splitting (index/cursor/title_slug), and splitting
+    // changes with chunking settings. The source of truth is the notebook's
+    // source names, from which we recover the highest used {index} and the
+    // cursor of the last uploaded record (uploadedState is the inverse of
+    // makeFilename), not a local watermark (that goes out of sync from
+    // manually deleting sources, YouTube sources in the same notebook, two
+    // JSONs in one notebook, reinstalling — see the "No new records" bug with
+    // an empty notebook).
+    let toPack = parsed;
+    let indexOffset = 0;
+    const notes: string[] = [];
+
+    if (settings.incremental) {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const notebookId = tab?.url ? extractNotebookId(tab.url) : null;
+      if (!notebookId) {
+        notes.push('No notebook open in the active tab — showing all files');
+      } else {
+        try {
+          const res = await chrome.tabs.sendMessage(tab.id!, { type: 'GET_SOURCE_NAMES' });
+          if (res?.error || !Array.isArray(res?.names)) throw new Error(res?.error ?? 'no response');
+          const names: string[] = res.names;
+          const sourceSlug = s.source_name ? slugify(s.source_name) : '';
+          const { maxIndex, cursor } = uploadedState(names, s.filename_pattern, sourceSlug, parsed, fields);
+          indexOffset = maxIndex;
+          if (cursor) {
+            toPack = recordsAfter(parsed, fields, cursor);
+            const skipped = parsed.length - toPack.length;
+            if (skipped > 0) notes.push(`Skipped ${skipped} records — already in notebook (up to ${cursor})`);
+            if (toPack.length === 0) notes.push('No new records');
+          } else if (names.length > 0) {
+            notes.push('No matches with already uploaded files — everything will be uploaded');
+          }
+        } catch (err) {
+          notes.push(
+            `Failed to get the notebook's source list (${err instanceof Error ? err.message : String(err)}) — showing all files`,
+          );
         }
-      } catch (err) {
-        notes.push(
-          `Failed to get the notebook's source list (${err instanceof Error ? err.message : String(err)}) — showing all files`,
-        );
       }
     }
+
+    const result = buildFiles(toPack, fields, s, indexOffset);
+    result.warnings = [...notes, ...result.warnings];
+
+    lastPreview = result;
+    renderPreview(result);
+    btnUpload.disabled = result.files.length === 0;
+  } finally {
+    btnPreview.disabled = false;
+    jsonStatus.hidden = true;
+    jsonStatus.textContent = '';
+    jsonStatus.classList.remove('busy');
   }
-
-  const result = buildFiles(toPack, fields, s, indexOffset);
-  result.warnings = [...notes, ...result.warnings];
-
-  lastPreview = result;
-  renderPreview(result);
-  btnUpload.disabled = result.files.length === 0;
 });
 
 // ---- upload -------------------------------------------------------------
+
+// Both buttons are locked for the whole upload: a second Preview would swap
+// lastPreview under a running queue, a second Upload would push a duplicate
+// batch into the content script's buffer.
+function setUploadBusy(busy: boolean): void {
+  btnUpload.disabled = busy;
+  btnPreview.disabled = busy;
+}
 
 function resetUploadUi(): void {
   uploadProgressWrap.hidden = true;
@@ -379,20 +403,29 @@ btnUpload.addEventListener('click', async () => {
 
   uploadProgressWrap.hidden = false;
   uploadProgressText.textContent = `0 of ${lastPreview.files.length}`;
+  // The queue lives in the content script and survives the popup, so the
+  // buttons are re-enabled by UPLOAD_DONE (or by the catch below), not here.
+  setUploadBusy(true);
 
   try {
-    await chrome.tabs.sendMessage(tab.id, {
-      type: 'UPLOAD',
-      files: lastPreview.files.map((f) => ({ filename: f.filename, markdown: f.markdown })),
-      batchSize: UPLOAD_BATCH_SIZE,
-    });
+    for (const batch of groupByBytes(lastPreview.files, 4_000_000)) {
+      await chrome.tabs.sendMessage(tab.id, {
+        type: 'UPLOAD_CHUNK',
+        files: batch.map((f) => ({ filename: f.filename, markdown: f.markdown })),
+      });
+    }
+    await chrome.tabs.sendMessage(tab.id, { type: 'UPLOAD', batchSize: UPLOAD_BATCH_SIZE });
     await noteTrialUse();
     await refreshPlanBadge();
-  } catch {
-    // Content script not responding — usually the NotebookLM tab was open
-    // before the extension was installed/updated, so the script never injected.
+  } catch (err) {
+    // Files go in size-bounded chunks to stay under Chrome's IPC message
+    // ceiling, but a send can still fail for other reasons (tab navigated
+    // away, content script not injected) — show the real error, not a guess.
     uploadProgressWrap.hidden = true;
-    showError('Could not reach the Notebook tab. Reload it (F5) and try again.');
+    setUploadBusy(false);
+    showError(
+      `Upload failed: ${err instanceof Error ? err.message : String(err)}. Reload the Notebook tab (F5) and try again.`,
+    );
   }
 });
 
@@ -430,6 +463,7 @@ chrome.runtime.onMessage.addListener((message: unknown) => {
     }
     case 'UPLOAD_DONE': {
       uploadProgressWrap.hidden = true;
+      setUploadBusy(false);
       const uploaded = Number(msg.uploaded) || 0;
       const failed = Number(msg.failed) || 0;
       const unconfirmed = Number(msg.unconfirmed) || 0;

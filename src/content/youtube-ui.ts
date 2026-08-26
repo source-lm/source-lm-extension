@@ -144,7 +144,7 @@ function stylePillButton(btn: HTMLButtonElement, iconOnly: boolean): void {
     iconOnly ? 'margin-left:8px !important' : 'margin-right:8px !important',
     'opacity:1',
   ].join(';');
-  // ponytail: a theme switch mid-page leaves an already-injected button in
+  // A theme switch mid-page leaves an already-injected button in
   // the old palette (no MutationObserver watching `dark`) — acceptable,
   // next injection pass (SPA navigation) picks up the new theme.
   btn.onpointerenter = () => {
@@ -558,7 +558,7 @@ function playlistTotalHint(loaded: number, root: ParentNode): string {
 
 // ---- comment harvest (watch page) ------------------------------------------
 
-// ponytail: replies are expanded (expandReplies below), but only as far as
+// Replies are expanded (expandReplies below), but only as far as
 // REPLIES_WALL_CLOCK_MS allows — a thread with hundreds of replies behind
 // repeated "Show more replies" clicks stops mid-way. Partial is deliberate:
 // a truncated thread beats a harvest that never returns.
@@ -1151,7 +1151,7 @@ function ensureButtons(): void {
   ensureChannelButton();
 }
 
-// ponytail: 2s polling instead of a routed MutationObserver — same trade-off
+// 2s polling instead of a routed MutationObserver — same trade-off
 // as delete-ui.ts:installDeleteButton; it also covers YouTube's SPA
 // navigation (watch -> playlist -> watch) for free, since ensureButtons() is
 // idempotent (each injector checks for its own marker attribute first).

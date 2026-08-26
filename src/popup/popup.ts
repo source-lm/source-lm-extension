@@ -1,6 +1,7 @@
 import type { Settings, PreviewResult } from '../lib/types.js';
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, patternPrefix, patternFromPrefix } from '../lib/settings.js';
 import { parseJson } from '../lib/parser.js';
+import { parseTelegramHtml } from '../lib/telegram-html.js';
 import { detectFields } from '../lib/schema-detector.js';
 import { buildFiles, uploadedState, groupByBytes } from '../lib/chunker.js';
 import { recordsAfter } from '../lib/cursor.js';
@@ -183,13 +184,17 @@ const fileNameLabel = el<HTMLSpanElement>('file-name');
 const fileMetaLabel = el<HTMLSpanElement>('file-meta');
 
 jsonFile.addEventListener('change', () => {
-  const file = jsonFile.files?.[0];
-  if (file) {
-    fileNameLabel.textContent = file.name;
-    fileMetaLabel.textContent = formatSize(file.size);
+  const files = [...(jsonFile.files ?? [])];
+  if (files.length === 1) {
+    fileNameLabel.textContent = files[0].name;
+    fileMetaLabel.textContent = formatSize(files[0].size);
+    dropzoneLabel?.classList.add('has-file');
+  } else if (files.length > 1) {
+    fileNameLabel.textContent = `${files.length} files (${files[0].name}…)`;
+    fileMetaLabel.textContent = formatSize(files.reduce((a, f) => a + f.size, 0));
     dropzoneLabel?.classList.add('has-file');
   } else {
-    fileNameLabel.textContent = 'Choose a .json file';
+    fileNameLabel.textContent = 'Choose a .json file or Telegram .html export';
     fileMetaLabel.textContent = '';
     dropzoneLabel?.classList.remove('has-file');
   }
@@ -203,10 +208,10 @@ dropzoneLabel?.addEventListener('dragover', () => dropzoneLabel.classList.add('d
 dropzoneLabel?.addEventListener('dragleave', () => dropzoneLabel.classList.remove('dragover'));
 dropzoneLabel?.addEventListener('drop', (e) => {
   dropzoneLabel.classList.remove('dragover');
-  const file = e.dataTransfer?.files?.[0];
-  if (!file) return;
+  const files = e.dataTransfer?.files;
+  if (!files || files.length === 0) return;
   const dt = new DataTransfer();
-  dt.items.add(file);
+  for (const file of files) dt.items.add(file);
   jsonFile.files = dt.files;
   jsonFile.dispatchEvent(new Event('change'));
 });
@@ -273,9 +278,9 @@ btnPreview.addEventListener('click', async () => {
   lastPreview = null;
   btnUpload.disabled = true;
 
-  const file = jsonFile.files?.[0];
-  if (!file) {
-    showError('Select a JSON file.');
+  const files = [...(jsonFile.files ?? [])];
+  if (files.length === 0) {
+    showError('Select a JSON file or Telegram HTML export.');
     return;
   }
 
@@ -288,9 +293,33 @@ btnPreview.addEventListener('click', async () => {
     // work below blocks the main thread (large JSON files freeze the tab).
     await new Promise(requestAnimationFrame);
 
+    const isHtml = files.every((f) => /\.html?$/i.test(f.name));
     let parsed, sourceName;
     try {
-      ({ records: parsed, sourceName } = parseJson(await file.text()));
+      if (isHtml) {
+        // messages.html has no numeric suffix (treated as 1), then
+        // messages2.html, messages3.html, … in chat order.
+        const ordered = [...files].sort(
+          (a, b) =>
+            Number(a.name.match(/(\d+)\.html?$/i)?.[1] ?? 1) - Number(b.name.match(/(\d+)\.html?$/i)?.[1] ?? 1),
+        );
+        parsed = [];
+        sourceName = '';
+        for (const f of ordered) {
+          const page = parseTelegramHtml(await f.text());
+          parsed.push(...page.records);
+          if (!sourceName && page.sourceName) sourceName = page.sourceName;
+        }
+        if (parsed.length === 0) {
+          showError('No Telegram messages found in the selected HTML files.');
+          return;
+        }
+      } else if (files.length === 1) {
+        ({ records: parsed, sourceName } = parseJson(await files[0].text()));
+      } else {
+        showError('Select either one JSON file or only Telegram HTML files.');
+        return;
+      }
     } catch (err) {
       showError(err instanceof Error ? err.message : String(err));
       return;

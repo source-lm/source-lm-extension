@@ -218,7 +218,7 @@ async function onDeleteClick(): Promise<void> {
   }
 }
 
-// ponytail: 2s polling instead of a routed MutationObserver — cheap and
+// 2s polling instead of a routed MutationObserver — cheap and
 // enough for one header button; revisit only if it visibly flickers.
 export function installDeleteButton(): void {
   void waitFor(() => (findSortButton() ? true : null), 30000).then(() => ensureButton());

@@ -104,7 +104,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     const title = tab.title ?? '';
     const { origin = DEFAULT_ORIGIN } = await readCache();
 
-    // ponytail: a notebook created from the menu gets no title (createTitle
+    // A notebook created from the menu gets no title (createTitle
     // ''), i.e. Notebook names it — same as the popup and the in-page dialog
     // when the title field is left empty. Prompting for one would mean a UI,
     // which is exactly what this one-click path avoids.

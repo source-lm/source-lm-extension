@@ -536,7 +536,7 @@ export async function runYoutubeJob(
       });
     }
 
-    // ponytail: captured-page upload has no DOM fallback (DECISIONS.md #9's
+    // Captured-page upload has no DOM fallback (DECISIONS.md #9's
     // dual RPC/DOM path covers only the JSON queue, not this file) — if the
     // RPC file path breaks, this reports an error instead of retrying via
     // DOM injection. Upgrade path: route job.file through runUpload instead

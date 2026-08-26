@@ -239,8 +239,6 @@ function showBrokenPanel(notebookId: string, broken: SourceInfo[], unfixable: So
       // Opened first, queued second: an await here would spend the user
       // gesture and let the popup blocker eat the tab. The write lands in
       // milliseconds, long before a human can open the popup on that page.
-      // ponytail: if that ever races, swap to opening after the write and
-      // accept the blocker prompt.
       window.open(url, '_blank', 'noopener');
       void queueFix(notebookId, source, url).catch((err) =>
         showJobToast(`Could not queue the fix: ${err instanceof Error ? err.message : String(err)}`, true),
@@ -315,7 +313,7 @@ function ensureUi(): void {
   }
 }
 
-// ponytail: same 2s polling as installDeleteButton — the panel re-renders
+// Same 2s polling as installDeleteButton — the panel re-renders
 // rows on its own, so the filter is re-applied on the tick too.
 export function installSourcesUi(): void {
   void waitFor(() => (findSortButton() ? true : null), 30000).then(() => ensureUi());

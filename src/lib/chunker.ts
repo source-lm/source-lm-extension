@@ -223,7 +223,7 @@ function escRegex(s: string): string {
 // contains dashes — the boundary is ambiguous), instead we go backwards:
 // build the expected name for each record and look for a match among the
 // notebook's names.
-// ponytail: O(records × sources) regexes (1005×50 ≈ 50k, milliseconds);
+// O(records × sources) regexes (1005×50 ≈ 50k, milliseconds);
 // if datasets grow an order of magnitude — index names by prefix.
 export function uploadedState(
   names: string[],

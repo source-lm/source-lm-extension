@@ -12,6 +12,7 @@ const result = esbuild.buildSync({
   stdin: {
     contents: `
       export { parseJson } from './parser';
+      export { parseTelegramHtml } from './telegram-html';
       export { detectFields } from './schema-detector';
       export { recordToMarkdown, recordTitle, slugify } from './markdown-generator';
       export { buildFiles, uploadedState, groupByBytes } from './chunker';
@@ -35,6 +36,7 @@ const code = result.outputFiles[0].text;
 const lib = await import('data:text/javascript;base64,' + Buffer.from(code).toString('base64'));
 const {
   parseJson,
+  parseTelegramHtml,
   detectFields,
   recordToMarkdown,
   recordTitle,
@@ -301,6 +303,119 @@ test('parser: sourceName from root name field drives filename prefix', () => {
   const fNoOverride = detectFields(records, sNoOverride);
   const resultNoOverride = buildFiles(records, fNoOverride, sNoOverride);
   assert.match(resultNoOverride.files[0].filename, /^001-/);
+});
+
+test('telegram-html: parses default/joined/service/media messages and feeds the incremental pipeline unchanged', () => {
+  const html = `<!DOCTYPE html>
+<html><head><title>Test Chat</title></head>
+<body>
+<div class="page_header">nav noise</div>
+<div class="message service" id="message1">
+<div class="body details">
+Someone created the group
+</div>
+</div>
+<div class="message default clearfix" id="message2">
+<div class="pull_left userpic_wrap"><img class="userpic" src="photos/a.jpg"/></div>
+<div class="body">
+<div class="pull_right date details" title="9 September 2020, 18:44:51">18:44</div>
+<div class="from_name">
+Jane Roe
+</div>
+<div class="reply_to details">In reply to <a href="#go_to_message1">a message</a></div>
+<div class="text">
+&quot;Hello&quot; &amp; welcome 😀 &laquo;q&raquo; &amp;lt;<br>second line <a href="https://example.com">https://example.com</a>
+</div>
+</div>
+</div>
+<div class="message default clearfix joined" id="message3">
+<div class="body">
+<div class="pull_right date details" title="9 September 2020, 18:45:18">18:45</div>
+<div class="forwarded_from details">Forwarded from Example Channel</div>
+<div class="text">
+Reposted text
+</div>
+</div>
+</div>
+<div class="message default clearfix" id="message4">
+<div class="pull_left userpic_wrap"><img class="userpic" src="photos/b.jpg"/></div>
+<div class="body">
+<div class="pull_right date details" title="9 September 2020, 18:46:00">18:46</div>
+<div class="from_name">
+John Doe
+</div>
+<div class="media clearfix pull_left media_photo">
+<div class="title bold">Photo</div>
+</div>
+</div>
+</div>
+</body></html>`;
+
+  const { records, sourceName } = parseTelegramHtml(html);
+
+  assert.equal(sourceName, 'Test Chat');
+  assert.equal(records.length, 3, 'the service message must be skipped');
+
+  assert.equal(records[0].date, '2020-09-09T18:44:51');
+  // id mirrors the Telegram JSON export's "id" — without it every record
+  // renders as "Untitled" (TITLE_CANDS has no match).
+  assert.equal(records[0].id, 2);
+  assert.equal(records[0].from, 'Jane Roe');
+  assert.equal(records[0].text, '"Hello" & welcome \u{1F600} «q» &lt;\nsecond line https://example.com');
+
+  // No from_name on the joined message — author carried from the previous one.
+  assert.equal(records[1].from, 'Jane Roe');
+  assert.equal(records[1].text, 'Forwarded from Example Channel:\nReposted text');
+
+  assert.equal(records[2].from, 'John Doe');
+  assert.equal(records[2].text, '[Photo]');
+
+  // Same {records, sourceName} shape as parseJson output — the incremental
+  // path (uploadedState/recordsAfter, DECISIONS.md #13) must dedup these by
+  // date exactly as it does for JSON-sourced records.
+  const s = settings({});
+  const f = detectFields(records, s);
+  assert.equal(f.dateField, 'date');
+
+  const cursor = slugify(records[0].date);
+  const after = recordsAfter(records, f, cursor);
+  assert.equal(after.length, 2, 'records at-or-before the cursor date are dropped');
+  assert.deepEqual(after, [records[1], records[2]]);
+
+  const built = buildFiles(records, f, s);
+  const names = built.files.map((file) => file.filename);
+  const state = uploadedState(names, s.filename_pattern, '', records, f);
+  assert.equal(recordsAfter(records, f, state.cursor).length, 0, 'a full prior upload leaves nothing new');
+
+  // Telegram Desktop variant: generic <title>, chat name in the page header,
+  // numeric DD.MM.YYYY dates, forwards nested in a `forwarded body` div.
+  const desktop = `<html><head><title>Exported Data</title></head><body>
+<div class="page_wrap">
+<div class="page_header"><div class="content"><div class="text bold">
+Test Chat
+</div></div></div>
+<div class="message default clearfix" id="message7">
+<div class="body">
+<div class="pull_right date details" title="09.09.2020 18:44:51 UTC+01:00">18:44</div>
+<div class="from_name">
+Jane Roe
+</div>
+<div class="forwarded body">
+<div class="from_name">
+Example Channel<span class="date details" title="08.09.2020 10:00:00 UTC+01:00"> 08.09.2020 10:00:00</span>
+</div>
+<div class="text">
+Reposted text
+</div>
+</div>
+</div>
+</div>
+</div></body></html>`;
+  const dt = parseTelegramHtml(desktop);
+  assert.equal(dt.sourceName, 'Test Chat');
+  assert.deepEqual(dt.records, [
+    { date: '2020-09-09T18:44:51', from: 'Jane Roe', text: 'Forwarded from Example Channel:\nReposted text', id: 7 },
+  ]);
 });
 
 test('schema-detector: content_fields auto does not lose text when candidate fields are each <50% of the sample', () => {

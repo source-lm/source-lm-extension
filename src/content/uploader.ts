@@ -37,7 +37,8 @@ type OutgoingMessage =
   | { type: 'UPLOAD_NEEDS_CONFIRM'; message: string };
 
 const ADD_SOURCE_RE = /add source|добавить источник|new source|создать источник|\+\s*(source|источник)/i;
-const DROP_ZONE_RE = /drag.{0,10}drop|drop.{0,10}file|перетащ/i;
+const DROP_ZONE_RE = /drag.{0,10}drop|drop.{0,10}file|перетащ|ドロップ/i; // ドロップ: ja "ここにファイルをドロップ", live-checked 2026-09-10
+const ADD_SOURCE_ICON_RE = /^(add|note_add|add_circle)$/;
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -160,14 +161,33 @@ export function waitFor<T>(fn: () => T | null, timeoutMs: number): Promise<T | n
 }
 
 // Step 1: the "Add source" button — matched by visible text, not by classes.
-function findAddSourceButton(): HTMLElement | null {
-  const candidates = document.querySelectorAll('button, [role=button], a');
+// Second pass for the locales the regex above does not list (Japanese,
+// Chinese, Korean...): NotebookLM's own `mat-icon` ligature, the same
+// language-independent trick as findSortButton in delete-ui.ts.
+// ponytail: the ligature set is a guess. Checked live on
+// notebook.google.com (2026-09-10, English UI): that build has no
+// "Add source" button at all — sources go in through the drop zone — and
+// the only `add` ligature on a notebook page belongs to "Create notebook"
+// in the top bar. Hence the second pass is scoped to the sources panel:
+// unscoped it would create a notebook instead of adding a source. To
+// re-verify, open a notebook in a locale we do not list and run
+// `[...document.querySelectorAll('mat-icon')].map(i => [i.textContent.trim(),
+// i.closest('button')?.getAttribute('aria-label')])`.
+export function findAddSourceButton(root: ParentNode = document): HTMLElement | null {
+  const candidates = root.querySelectorAll('button, [role=button], a');
   for (const el of candidates) {
     const text = (el.textContent || '').trim();
     const aria = el.getAttribute('aria-label') || '';
     if (ADD_SOURCE_RE.test(text) || ADD_SOURCE_RE.test(aria)) {
       return el as HTMLElement;
     }
+  }
+
+  const panel = root.querySelector('source-picker');
+  if (!panel) return null;
+  for (const el of panel.querySelectorAll('button, [role=button], a')) {
+    const icon = (el.querySelector('mat-icon')?.textContent || '').trim();
+    if (ADD_SOURCE_ICON_RE.test(icon)) return el as HTMLElement;
   }
   return null;
 }

@@ -1,0 +1,10 @@
+{
+  "extName": {
+    "message": "Source LM",
+    "description": "Extension name shown in the Chrome Web Store and chrome://extensions."
+  },
+  "extDesc": {
+    "message": "Bulk-add sources to NotebookLM and Gemini Notebook: JSON datasets, YouTube videos, link lists, web pages.",
+    "description": "Chrome Web Store short description, 132 characters max."
+  }
+}

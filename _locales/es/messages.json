@@ -1,0 +1,10 @@
+{
+  "extName": {
+    "message": "Source LM — fuentes en lote para NotebookLM",
+    "description": "Extension name shown in the Chrome Web Store and chrome://extensions."
+  },
+  "extDesc": {
+    "message": "Añade fuentes en lote a NotebookLM y Gemini Notebook: datos JSON, vídeos de YouTube, listas de enlaces y páginas web.",
+    "description": "Chrome Web Store short description, 132 characters max."
+  }
+}

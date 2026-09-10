@@ -85,7 +85,7 @@ const { parseBatchExecute, extractRpcError } = rpc;
 const uploaderResult = esbuild.buildSync({
   stdin: {
     contents: `
-      export { extractNotebookId, extractSourceId } from './uploader';
+      export { extractNotebookId, extractSourceId, findAddSourceButton } from './uploader';
     `,
     resolveDir: contentDir,
     loader: 'ts',
@@ -98,7 +98,7 @@ const uploaderResult = esbuild.buildSync({
 
 const uploaderCode = uploaderResult.outputFiles[0].text;
 const uploader = await import('data:text/javascript;base64,' + Buffer.from(uploaderCode).toString('base64'));
-const { extractNotebookId, extractSourceId } = uploader;
+const { extractNotebookId, extractSourceId, findAddSourceButton } = uploader;
 
 const youtubeResult = esbuild.buildSync({
   stdin: {
@@ -1376,4 +1376,33 @@ test('capture: pageToMarkdown writes title/url/scope frontmatter, captureFilenam
   assert.equal(captureFilename('example.com', 'How it works'), '[example.com]-how-it-works.md');
   assert.equal(captureFilename('example.com', ''), '[example.com]-example-com.md');
   assert.equal(captureFilename('example.com', undefined), '[example.com]-example-com.md');
+});
+
+test('uploader: findAddSourceButton falls back to the mat-icon ligature inside the sources panel', () => {
+  const button = (text, aria, icon) => ({
+    textContent: text,
+    getAttribute: (name) => (name === 'aria-label' ? aria : null),
+    querySelector: (sel) => (sel === 'mat-icon' && icon ? { textContent: icon } : null),
+  });
+  // A page is a document stub: querySelectorAll returns the buttons, and
+  // querySelector('source-picker') the panel (itself a querySelectorAll stub).
+  const page = (buttons, panelButtons) => ({
+    querySelectorAll: () => buttons,
+    querySelector: (sel) =>
+      sel === 'source-picker' && panelButtons ? { querySelectorAll: () => panelButtons } : null,
+  });
+
+  // Japanese UI: no text the regex knows, so the icon pass inside the panel wins.
+  const jaAdd = button('addソースを追加', 'ソースを追加', 'add');
+  const createNotebook = button('add新しいノートブック', '新しいノートブック', 'add');
+  assert.equal(findAddSourceButton(page([createNotebook, jaAdd], [jaAdd])), jaAdd);
+
+  // Nothing matches by text and no add-ish icon in the panel — no click at all
+  // is better than clicking the wrong button.
+  const sort = button('sort', '並べ替え', 'sort');
+  assert.equal(findAddSourceButton(page([sort], [sort])), null);
+
+  // The Russian locale still matches on the first pass, panel or no panel.
+  const ruAdd = button('Добавить источник', null, null);
+  assert.equal(findAddSourceButton(page([ruAdd], null)), ruAdd);
 });

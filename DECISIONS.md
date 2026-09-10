@@ -360,6 +360,19 @@ the code looks the way it does, not at a style preference.
     is offered a fix — status 3 is transient for audio/unclassified
     sources; errored YouTube sources are listed as unfixable.
 
+17. **`_locales` exists for the Chrome Web Store listing only, not for
+    the UI.** `manifest.json` carries `default_locale: "en"` and
+    `__MSG_extName__`/`__MSG_extDesc__`, and `_locales/{en,es,ja,zh_TW}/
+    messages.json` hold just those two keys — the store shows a
+    localized name and short description (and only then offers a
+    per-locale listing tab in the dashboard). The popup UI, errors and
+    status text stay English and `chrome.i18n` must not appear in the
+    code: translating ~150 UI strings is a maintenance cost the measured
+    demand (Japan only) does not pay for. `_locales` has to be listed
+    explicitly in the two packaging commands (`package.json` `package`
+    and `.github/workflows/release.yml`), or the store rejects the zip
+    for a missing default locale.
+
 ## NotebookLM limits (warning logic in Preview)
 
 - 50 sources/notebook on the free plan, 300 on Pro —

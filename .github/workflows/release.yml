@@ -67,14 +67,14 @@ jobs:
       - name: Package extension
         run: |
           NAME="source-lm-${GITHUB_REF_NAME}.zip"
-          zip -r "$NAME" manifest.json icons dist src/popup/popup.html src/popup/popup.css
+          zip -r "$NAME" manifest.json _locales icons dist src/popup/popup.html src/popup/popup.css
           echo "ZIP_NAME=$NAME" >> "$GITHUB_ENV"
 
       - name: Sanity-check package contents
         run: |
           TMP_DIR=$(mktemp -d)
           unzip -q "$ZIP_NAME" -d "$TMP_DIR"
-          for f in manifest.json dist/popup.js dist/content.js dist/youtube.js icons/icon-128.png src/popup/popup.html src/popup/popup.css; do
+          for f in manifest.json _locales/en/messages.json _locales/es/messages.json _locales/ja/messages.json _locales/zh_TW/messages.json dist/popup.js dist/content.js dist/youtube.js icons/icon-128.png src/popup/popup.html src/popup/popup.css; do
             if [ ! -f "$TMP_DIR/$f" ]; then
               echo "Missing $f in $ZIP_NAME" >&2
               exit 1

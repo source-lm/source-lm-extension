@@ -1,0 +1,10 @@
+{
+  "extName": {
+    "message": "Source LM — NotebookLM 一括ソース追加",
+    "description": "Extension name shown in the Chrome Web Store and chrome://extensions."
+  },
+  "extDesc": {
+    "message": "NotebookLM と Gemini Notebook にソースを一括追加。YouTube 動画、JSON データ、リンク一覧、Web ページをまとめて取り込みます。",
+    "description": "Chrome Web Store short description, 132 characters max."
+  }
+}

@@ -42,8 +42,9 @@ delete checked sources in one batch, find and re-capture broken sources.
 
 ## Install
 
-**From the Chrome Web Store** — the listing is in review; the link lands
-here when it's live.
+**From a store:**
+[Chrome Web Store](https://chromewebstore.google.com/detail/source-lm/egebmhbkdageoafdbpacoaohogcobcbg)
+or [Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/source-lm/inigmpceananlbjobihfcpadmbcbkafi).
 
 **From source:**
 

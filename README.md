@@ -35,7 +35,7 @@ through the notebook page's own upload endpoint.
 | **Notion page** | "Add to NotebookLM" in Notion's own top bar. One click adds the page; tick "Include child pages (1 level)" and its direct children come too, one source each. Own workspace: Notion's own Markdown export. Public `*.notion.site`: read the way the site itself draws the page. |
 | **YouTube video, playlist, channel** | "Add to notebook" buttons inside YouTube's own UI, or pick videos from the popup. |
 | **YouTube comments** | Top comment threads with replies, as a separate Markdown source. |
-| **Any web page** | Paste one link or a whole list. Pages NotebookLM can't fetch (login-walled, JS-rendered) are captured as Markdown from the tab you have open. |
+| **Any web page** | Paste one link or a whole list. Pages NotebookLM can't fetch (login-walled, JS-rendered) are captured as Markdown from the tab you have open; on ChatGPT, Claude, Gemini and Perplexity conversation pages the capture is a transcript with each turn labelled. |
 | **Selected text** | Select, right-click, "Add selection to Notebook", pick a notebook. |
 
 And on the notebook page itself: filter the Sources list, select duplicates,

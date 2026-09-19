@@ -926,6 +926,46 @@ function extractPage(): { title: string; url: string; text: string } {
   // information a Markdown source needs. Chrome/footer/nav noise is dropped
   // by narrowing to <article>/<main> when the page has one, instead of
   // stripping nodes out of the user's actual page.
+  // ponytail: per-site turn selectors for the four AI chats — [all turns,
+  // user turns, assistant label]. Innermost text nodes on purpose: the outer
+  // wrappers carry screen-reader "You said:" copies and, on Gemini, the whole
+  // sidebar sits inside <main>. On a redesign they match nothing and the
+  // generic <article>/<main> path below takes over.
+  const chats: Record<string, [string, string, string]> = {
+    'chatgpt.com': [
+      '[data-message-author-role="user"], [data-message-author-role="assistant"]',
+      '[data-message-author-role="user"]',
+      'ChatGPT',
+    ],
+    'claude.ai': ['[data-testid="user-message"], .font-claude-response', '[data-testid="user-message"]', 'Claude'],
+    'gemini.google.com': ['.query-text-line, message-content', '.query-text-line', 'Gemini'],
+    'www.perplexity.ai': ['.group\\/user-bubble, .prose', '.group\\/user-bubble', 'Perplexity'],
+  };
+  const chat = chats[location.hostname];
+  if (chat) {
+    const [turnSelector, userSelector, assistant] = chat;
+    const turns: string[] = [];
+    let sawUser = false;
+    let sawAssistant = false;
+    for (const el of document.querySelectorAll<HTMLElement>(turnSelector)) {
+      const text = el.innerText.trim();
+      // Empty (hidden, image-only) nodes and matches nested inside another
+      // match (a generic .prose inside a bubble) would become blank or
+      // duplicated turns.
+      if (!text || el.parentElement?.closest(turnSelector)) continue;
+      const user = el.matches(userSelector);
+      if (user) sawUser = true;
+      else sawAssistant = true;
+      const label = user ? '**You:**' : `**${assistant}:**`;
+      // Gemini renders each paragraph of a query as its own element — merge
+      // consecutive same-speaker elements into one turn.
+      if (turns.length && turns[turns.length - 1].startsWith(label + '\n')) turns[turns.length - 1] += '\n' + text;
+      else turns.push(label + '\n' + text);
+    }
+    // Only one speaker matching means one selector outlived a redesign; a
+    // transcript missing every answer is worse than the generic capture.
+    if (sawUser && sawAssistant) return { title: document.title, url: location.href, text: turns.join('\n\n') };
+  }
   const root = document.querySelector('article') ?? document.querySelector('main') ?? document.body;
   return { title: document.title, url: location.href, text: (root as HTMLElement).innerText };
 }

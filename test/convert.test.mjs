@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import esbuild from 'esbuild';
@@ -1374,6 +1375,63 @@ test('youtube-ui: commentsToMarkdown groups replies under their thread and separ
 
   const empty = commentsToMarkdown('Nothing', 'https://example.com/', []);
   assert.match(empty, /\ncount: "0"\nreplies: "0"\n---\n\n# Comments — Nothing$/);
+});
+
+// extractPage lives in popup.ts and runs inside the page through
+// executeScript, i.e. serialized and re-executed — so the test does the same:
+// cut the function out of the source, strip types, run it against a stub DOM.
+const extractPageSrc = fs.readFileSync(path.join(__dirname, '../src/popup/popup.ts'), 'utf8').match(/\nfunction extractPage\(\)[\s\S]*?\n}\n/)[0];
+const extractPageJs = esbuild.transformSync(extractPageSrc, { loader: 'ts' }).code;
+const runExtractPage = (hostname, elements, mainText = 'GENERIC') => {
+  const matchesOf = (sel) => (el) => sel.split(',').some((s) => el.selectors.includes(s.trim()));
+  const nodes = elements.map((e) => ({ innerText: e.text, selectors: e.selectors, parentElement: null }));
+  elements.forEach((e, i) => {
+    if (e.parent !== undefined) nodes[i].parentElement = { closest: (sel) => (matchesOf(sel)(nodes[e.parent]) ? nodes[e.parent] : null) };
+  });
+  for (const n of nodes) n.matches = (sel) => matchesOf(sel)(n);
+  const document = {
+    title: 'Chat title',
+    body: { innerText: 'BODY' },
+    querySelectorAll: (sel) => nodes.filter(matchesOf(sel)),
+    querySelector: (sel) => (sel === 'main' ? { innerText: mainText } : null),
+  };
+  return new Function('document', 'location', extractPageJs + '\nreturn extractPage();')(document, { hostname, href: 'https://' + hostname + '/c/1' });
+};
+
+test('capture: extractPage labels chat turns per host, merges paragraphs, skips nested/empty, falls back on a half match', () => {
+  const user = '[data-message-author-role="user"]';
+  const bot = '[data-message-author-role="assistant"]';
+  const chat = runExtractPage('chatgpt.com', [
+    { text: 'hi', selectors: [user] },
+    { text: '', selectors: [bot] }, // image-only reply: no blank turn
+    { text: ' hello ', selectors: [bot] },
+    { text: 'tool output', selectors: ['[data-message-author-role="tool"]'] }, // not a speaker
+  ]);
+  assert.equal(chat.text, '**You:**\nhi\n\n**ChatGPT:**\nhello');
+  assert.equal(chat.title, 'Chat title');
+
+  // Gemini: a two-paragraph query is two .query-text-line elements — one turn.
+  const gemini = runExtractPage('gemini.google.com', [
+    { text: 'p1', selectors: ['.query-text-line'] },
+    { text: 'p2', selectors: ['.query-text-line'] },
+    { text: 'answer', selectors: ['message-content'] },
+  ]);
+  assert.equal(gemini.text, '**You:**\np1\np2\n\n**Gemini:**\nanswer');
+
+  // Perplexity: a .prose nested inside the user bubble is the same text again.
+  const pplx = runExtractPage('www.perplexity.ai', [
+    { text: 'q', selectors: ['.group\\/user-bubble'] },
+    { text: 'q', selectors: ['.prose'], parent: 0 },
+    { text: 'a', selectors: ['.prose'] },
+  ]);
+  assert.equal(pplx.text, '**You:**\nq\n\n**Perplexity:**\na');
+
+  // Only the user selector survived a redesign: generic capture, not a
+  // transcript with every answer missing.
+  const half = runExtractPage('claude.ai', [{ text: 'q', selectors: ['[data-testid="user-message"]'] }]);
+  assert.equal(half.text, 'GENERIC');
+  // Unknown host: generic path untouched.
+  assert.equal(runExtractPage('example.com', []).text, 'GENERIC');
 });
 
 test('capture: pageToMarkdown writes title/url/scope frontmatter, captureFilename falls back to the host', () => {

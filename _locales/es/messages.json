@@ -4,7 +4,7 @@
     "description": "Extension name shown in the Chrome Web Store and chrome://extensions."
   },
   "extDesc": {
-    "message": "Añade fuentes en lote a NotebookLM y Gemini Notebook: datos JSON, vídeos de YouTube, listas de enlaces y páginas web.",
+    "message": "Añade fuentes en lote a NotebookLM y Gemini Notebook: páginas de Notion, datos JSON, vídeos de YouTube, enlaces y páginas web.",
     "description": "Chrome Web Store short description, 132 characters max."
   }
 }

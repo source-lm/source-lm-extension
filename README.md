@@ -2,8 +2,8 @@
 
 <p align="center">
   <b>Bulk sources into NotebookLM, straight from the browser.</b><br>
-  JSON datasets, YouTube playlists, link lists and web pages — added as
-  sources to your own notebook. No downloads, no backend, no account.
+  Notion pages, JSON datasets, YouTube playlists, link lists and web pages —
+  added as sources to your own notebook. No downloads, no backend, no account.
 </p>
 
 <p align="center">
@@ -32,6 +32,7 @@ through the notebook page's own upload endpoint.
 | Source | How |
 |---|---|
 | **JSON dataset** | Pick a `.json`, Preview shows the packing, Upload sends it. Records are never split across files; re-running adds only what's new. |
+| **Notion page** | "Add to NotebookLM" in Notion's own top bar. One click adds the page; tick "Include child pages (1 level)" and its direct children come too, one source each. Own workspace: Notion's own Markdown export. Public `*.notion.site`: read the way the site itself draws the page. |
 | **YouTube video, playlist, channel** | "Add to notebook" buttons inside YouTube's own UI, or pick videos from the popup. |
 | **YouTube comments** | Top comment threads with replies, as a separate Markdown source. |
 | **Any web page** | Paste one link or a whole list. Pages NotebookLM can't fetch (login-walled, JS-rendered) are captured as Markdown from the tab you have open. |
@@ -178,10 +179,10 @@ the words per file or split the JSON.
 ## Free and Pro
 
 **Free** — one source at a time (a link, the current page, a single YouTube
-video), source deletion, filtering, duplicates, broken-source fixes, and
+video, a single Notion page), source deletion, filtering, duplicates, broken-source fixes, and
 Preview. Plus **5 bulk actions per calendar month**, shared between a full
-JSON upload and selecting more than one YouTube video; the count resets on
-the 1st.
+JSON upload, selecting more than one YouTube video, and a Notion page taken
+together with its child pages; the count resets on the 1st.
 
 **Pro** — the same bulk actions, unmetered. One-time purchase, **not a
 subscription**: pay once, keep the license. Sold through Polar, which is the

@@ -4,7 +4,7 @@
     "description": "Extension name shown in the Chrome Web Store and chrome://extensions."
   },
   "extDesc": {
-    "message": "NotebookLM と Gemini Notebook にソースを一括追加。YouTube 動画、JSON データ、リンク一覧、Web ページをまとめて取り込みます。",
+    "message": "NotebookLM と Gemini Notebook にソースを一括追加。Notion ページ、YouTube 動画、JSON データ、リンク一覧、Web ページをまとめて取り込みます。",
     "description": "Chrome Web Store short description, 132 characters max."
   }
 }

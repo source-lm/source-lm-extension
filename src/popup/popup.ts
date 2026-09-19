@@ -854,7 +854,7 @@ btnAddComments.addEventListener('click', async () => {
   const job: YoutubeJob = {
     type: 'ADD_YOUTUBE',
     videos: [],
-    file: response.file,
+    files: [response.file],
     createdAt: Date.now(),
     ...target,
   };
@@ -1007,10 +1007,12 @@ btnAddPage.addEventListener('click', async () => {
   const job: YoutubeJob = {
     type: 'ADD_YOUTUBE',
     videos: [],
-    file: {
-      filename: captureFilename(host, captured.title),
-      markdown: pageToMarkdown(captured.title, captured.url, captured.text, 'page'),
-    },
+    files: [
+      {
+        filename: captureFilename(host, captured.title),
+        markdown: pageToMarkdown(captured.title, captured.url, captured.text, 'page'),
+      },
+    ],
     createdAt: Date.now(),
     ...(replaceSourceId ? { replaceSourceId } : {}),
     ...target,

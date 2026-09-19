@@ -203,11 +203,18 @@ Offline use is unaffected.
 JSON is parsed and split into Markdown entirely in the browser, inside the
 popup. Data leaves the extension only toward
 `notebooklm.google.com`/`notebook.google.com` — the service you're already
-signed into — and only after an explicit click. There is **no backend of
-ours**: no proxy, no logging server, no telemetry. Your Google session
-cookies never leave your browser. The only third-party call is to Polar's
-public license API, and it carries nothing but the license key and an
-activation id.
+signed into — and only after an explicit click. A Notion page is read on
+`app.notion.com` only when you press the button there, via Notion's own export
+endpoint (the resulting zip comes from the signed `file.notion.com` link
+Notion hands back) — and on a public `*.notion.site` page via Notion's own
+page API, which is what that site uses to draw itself. Both are content
+scripts on those two hosts, with no host permission behind them.
+Nothing leaves the browser except
+toward your notebook. There is
+**no backend of ours**: no proxy, no logging server, no telemetry. Your Google session
+cookies never leave your browser. The only call to a host you are not already
+signed into is Polar's public license API, and it carries nothing but the
+license key and an activation id.
 
 Details of what is read and what is never collected: [`PRIVACY.md`](./PRIVACY.md).
 
@@ -272,8 +279,8 @@ npm test           # node --test test/convert.test.mjs
 npx tsc --noEmit
 ```
 
-Four entry points build into `dist/`: `popup.ts`, `uploader.ts` →
-`dist/content.js`, `youtube.ts`, `background.ts`. Minification is off on
+Five entry points build into `dist/`: `popup.ts`, `uploader.ts` →
+`dist/content.js`, `youtube.ts`, `notion.ts`, `background.ts`. Minification is off on
 purpose — Chrome Web Store review requires that functionality be discernible
 from the submitted code.
 

@@ -112,10 +112,12 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     const youtubeJob: YoutubeJob = {
       type: 'ADD_YOUTUBE',
       videos: [],
-      file: {
-        filename: captureFilename(host, title),
-        markdown: pageToMarkdown(title, pageUrl, text, 'selection'),
-      },
+      files: [
+        {
+          filename: captureFilename(host, title),
+          markdown: pageToMarkdown(title, pageUrl, text, 'selection'),
+        },
+      ],
       createdAt: Date.now(),
       ...(targetId ? { targetNotebookId: targetId } : { createTitle: '' }),
     };

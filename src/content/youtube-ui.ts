@@ -19,11 +19,17 @@
 import { collectVideos, dedupeVideos, visiblePageRoot, type VideoItem } from './youtube';
 import { isPro, trialRemaining, noteTrialUse, FREE_QUOTA, PRICE_LABEL, CHECKOUT_URL } from '../lib/license.js';
 import { frontmatter, slugify } from '../lib/markdown-generator.js';
-
-type NotebookSummary = { id: string; title: string; emoji?: string };
-type NotebookCache = { notebooks: NotebookSummary[]; origin: string; at: number };
-
-const DEFAULT_ORIGIN = 'https://notebooklm.google.com';
+import {
+  DEFAULT_ORIGIN,
+  buildButton,
+  claimSlot,
+  firstRendered,
+  notebookTabUrl,
+  queryRendered,
+  readNotebookCache,
+} from './page-ui';
+// Re-exported for the test bundle (test/convert.test.mjs imports them from here).
+export { firstRendered, notebookTabUrl } from './page-ui';
 
 // ---- pure helpers (exported for the test, no DOM/chrome) -----------------
 
@@ -48,14 +54,6 @@ export function currentWatchVideo(href: string, title: string): VideoItem | null
 export function currentPageVideo(): VideoItem | null {
   const h1 = document.querySelector('ytd-watch-metadata h1');
   return currentWatchVideo(location.href, (h1?.textContent || document.title).trim());
-}
-
-// Same URL shape as popup.ts's btnAddYoutube handler: a specific notebook
-// opens at /notebook/<id>, a new one opens the bare origin (its own creation
-// flow runs inside runYoutubeJob on that tab, not here).
-export function notebookTabUrl(origin: string, targetId?: string): string {
-  const base = origin.replace(/\/+$/, '');
-  return targetId ? `${base}/notebook/${targetId}` : `${base}/`;
 }
 
 // Channel URLs: the handle form (/@name), and three legacy forms YouTube
@@ -104,100 +102,6 @@ export function commentsToMarkdown(videoTitle: string, url: string, comments: Yo
     ].join('\n\n'),
   );
   return [fm, `# Comments — ${videoTitle}`, threads.join('\n\n---\n\n')].filter(Boolean).join('\n\n');
-}
-
-// ---- notebook cache --------------------------------------------------------
-
-async function readNotebookCache(): Promise<NotebookCache | null> {
-  const stored = await chrome.storage.local.get('notebookCache');
-  const cache = stored.notebookCache as NotebookCache | undefined;
-  return cache && Array.isArray(cache.notebooks) ? cache : null;
-}
-
-// ---- button styling (inline only, no stylesheet — same isolation rule as
-// uploader.ts:showJobToast: this must not be reachable by YouTube's CSS, and
-// vice versa) --------------------------------------------------------------
-
-// Colors are read from YouTube's theme flag, not a --yt-spec-* variable:
-// on the watch page --yt-spec-badge-chip-background resolves to something
-// transparent, which is exactly why the button used to render as bare text.
-// !important on every declaration because YouTube's own rule on the action
-// row otherwise flattens the pill back to plain text.
-function stylePillButton(btn: HTMLButtonElement, iconOnly: boolean): void {
-  const dark = document.documentElement.hasAttribute('dark');
-  const background = dark ? '#f1f1f1' : '#0f0f0f';
-  const color = dark ? '#0f0f0f' : '#f1f1f1';
-  btn.style.cssText = [
-    'display:inline-flex !important',
-    'align-items:center !important',
-    'gap:6px !important',
-    'height:36px !important',
-    `padding:0 ${iconOnly ? '0' : '16px'} !important`,
-    iconOnly ? 'width:36px !important;justify-content:center !important' : '',
-    'border:0 !important',
-    'border-radius:18px !important',
-    `background:${background} !important`,
-    `color:${color} !important`,
-    'font:500 14px/36px Roboto,Arial,sans-serif !important',
-    'cursor:pointer !important',
-    'flex-shrink:0 !important',
-    iconOnly ? 'margin-left:8px !important' : 'margin-right:8px !important',
-    'opacity:1',
-  ].join(';');
-  // A theme switch mid-page leaves an already-injected button in
-  // the old palette (no MutationObserver watching `dark`) — acceptable,
-  // next injection pass (SPA navigation) picks up the new theme.
-  btn.onpointerenter = () => {
-    btn.style.setProperty('opacity', '.9', 'important');
-  };
-  btn.onpointerleave = () => {
-    btn.style.setProperty('opacity', '1', 'important');
-  };
-}
-
-function buildButton(label: string, iconOnly: boolean): HTMLButtonElement {
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.setAttribute('aria-label', label);
-  btn.title = label;
-  btn.textContent = iconOnly ? '+' : label;
-  stylePillButton(btn, iconOnly);
-  // Some anchors (e.g. the watch-page playlist panel header) are themselves
-  // a collapse toggle: without this, a click on the button bubbles up and
-  // collapses the panel. Polymer's on-tap recognizer starts from
-  // pointerdown/mousedown, so those need stopping too, not just click. Only
-  // stopPropagation — never preventDefault/stopImmediatePropagation, callers
-  // add their own click listener on this same node right after.
-  for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
-    btn.addEventListener(type, (e) => e.stopPropagation());
-  }
-  return btn;
-}
-
-// YouTube's SPA hides what it navigates away from instead of removing it
-// (youtube.ts:visiblePageRoot) — stale page renderers, stale action rows.
-// document.querySelector returns the FIRST match in document order, which can
-// be one of those corpses: the button gets injected where nobody can see it
-// and the "already injected" guard keeps it there forever, until a reload.
-// Everything below therefore only ever matches rendered elements.
-export function firstRendered<T extends { getClientRects(): { length: number } }>(
-  els: Iterable<T>,
-): T | null {
-  for (const el of els) if (el.getClientRects().length > 0) return el;
-  return null;
-}
-
-function queryRendered<T extends HTMLElement>(sel: string, root: ParentNode = document): T | null {
-  return firstRendered(root.querySelectorAll<T>(sel));
-}
-
-// True when the caller should inject. A rendered button means "done"; any
-// leftover hidden copies are dropped first so re-injection can't pile up.
-function claimSlot(marker: string): boolean {
-  const existing = [...document.querySelectorAll(marker)];
-  if (firstRendered(existing)) return false;
-  for (const el of existing) el.remove();
-  return true;
 }
 
 // ---- dialog ----------------------------------------------------------------
@@ -479,7 +383,7 @@ async function openDialog(subject: DialogSubject): Promise<void> {
             type: 'ADD_YOUTUBE',
             videos,
             createdAt: Date.now(),
-            ...(file ? { file } : {}),
+            ...(file ? { files: [file] } : {}),
             ...(createNew ? { createTitle } : { targetNotebookId: select.value }),
           },
         });

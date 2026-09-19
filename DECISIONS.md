@@ -53,6 +53,39 @@ the code looks the way it does, not at a style preference.
   `youtube-ui.ts:harvestCommentsFile` — the top-N comment threads with
   their replies), and installs the in-page «Add to notebook» buttons
   from `youtube-ui.ts`.
+- `src/content/notion.ts` — content script on `app.notion.com` and on public
+  `*.notion.site` pages: three lines that install the in-page button from
+  `notion-ui.ts`, no message listener (the popup has no Notion tab — the flow
+  starts from the button).
+- `src/content/notion-ui.ts` — the «Add to NotebookLM» pill in Notion's top
+  bar and the dialog behind it, plus the network half of the export
+  (`enqueueTask` → `getTasks` → download the zip). A deliberate copy of the
+  `youtube-ui.ts` pattern rather than a generalisation of it; only the
+  host-agnostic helpers are shared, from `page-ui.ts`, instead of being
+  duplicated. Picks the second path (`notion-public.ts`) by hostname, and has
+  its own anchor ladder for the published-site top bar. See decision #18.
+- `src/content/notion-public.ts` — the network half of the public
+  `*.notion.site` path: `loadCachedPageChunk` (paginated by its cursor) +
+  `syncRecordValuesMain` for the blocks the chunks only referenced, and
+  `queryCollection` for database rows. Hands each page's record map to
+  `lib/notion-blocks.ts` and returns the same `{title, filename, markdown}[]`
+  the export path returns. 300 files max. Decision #18.
+- `src/content/page-ui.ts` — the in-page helpers both hosts need and neither
+  owns: the injection guards (`claimSlot`, `firstRendered`, `queryRendered`),
+  the pill button (`buildButton`), and the notebook-cache readers
+  (`readNotebookCache`, `notebookTabUrl`, `DEFAULT_ORIGIN`). Host-agnostic on
+  purpose — it is what keeps `dist/notion.js` free of YouTube's code, and
+  `youtube-ui.ts` re-exports two of them for the test bundle.
+- `src/lib/notion-export.ts` — the pure half: page id out of a URL, the
+  `enqueueTask` request body, a dependency-free zip reader (stored and
+  `deflate-raw`), and the depth filter that turns zip paths into sources.
+  Tested in `test/convert.test.mjs`.
+- `src/lib/notion-blocks.ts` — the other pure half, for the public path:
+  Notion's block JSON → Markdown (`pageToMarkdown`, plus `blockValue`,
+  `richText`, `mergeRecordMaps`, `missingBlockIds`, `entriesSection`). No
+  fetch, no DOM, no chrome, so the whole conversion is testable under plain
+  node — `test/convert.test.mjs` walks one record map with every block type
+  through it.
 - `src/background.ts` — the only service worker, and deliberately the
   smallest possible one (decision #3): registers the «Add selection to
   Notebook» context menu with a submenu of notebooks (read from the
@@ -64,9 +97,9 @@ the code looks the way it does, not at a style preference.
   (`pageToMarkdown`, `captureFilename`), shared by «Add page as .md» in
   the popup and the context menu. Pure, DOM-free: the service worker
   imports it.
-- `build.mjs` — esbuild, four entry points (`popup.ts`, `uploader.ts` →
-  `dist/content.js`, `youtube.ts`, `background.ts`), skips ones that
-  don't exist.
+- `build.mjs` — esbuild, five entry points (`popup.ts`, `uploader.ts` →
+  `dist/content.js`, `youtube.ts`, `notion.ts`, `background.ts`), skips ones
+  that don't exist.
   Minification is disabled (identifiers stay readable) — important for
   Chrome Web Store review ("full functionality must be discernible from
   submitted code"), don't enable without a reason.
@@ -75,9 +108,11 @@ the code looks the way it does, not at a style preference.
   `src/background.ts` for the context menu (decision #3);
   `permissions: ["activeTab", "storage", "scripting", "contextMenus"]`,
   `host_permissions` — both NotebookLM/Gemini Notebook domains
-  (`notebooklm.google.com`, `notebook.google.com`), `youtube.com`, and
+  (`notebooklm.google.com`, `notebook.google.com`), `youtube.com` and
   `api.polar.sh` (license API calls from the popup, see decision
-  #15). `scripting` is requested only for reading page text:
+  #15). `app.notion.com` and `*.notion.site` are in `content_scripts`
+  only, with no host permission behind them (decision #18).
+  `scripting` is requested only for reading page text:
   the current-page capture button on the popup's third tab and the
   «Add selection to Notebook» context menu
   (`chrome.scripting.executeScript` from `popup.ts` / `background.ts`,
@@ -372,6 +407,102 @@ the code looks the way it does, not at a style preference.
     explicitly in the two packaging commands (`package.json` `package`
     and `.github/workflows/release.yml`), or the store rejects the zip
     for a missing default locale.
+
+18. **A Notion page is fetched through Notion's own export endpoint — not by
+    scraping the DOM, and not through `loadPageChunk`.** `notion-ui.ts` posts
+    an `exportBlock` task to `/api/v3/enqueueTask`, polls `/api/v3/getTasks`
+    every 1.5s until `results[0].state === 'success'` hands back
+    `status.exportURL`, downloads that zip and unpacks it in
+    `lib/notion-export.ts` (stored entries and
+    `DecompressionStream('deflate-raw')` — no dependency, decision #7). The
+    zip itself is fetched from the signed `file.notion.com` URL the task hands
+    back, and that URL is host-checked against `*.notion.com` / `*.notion.so`
+    before it is followed with the user's cookies (same rule as the upload URL
+    in `uploader.ts`). A zip inside a zip is unwrapped at most two levels deep
+    and the whole export may unpack to at most 64 MiB (`MAX_UNZIPPED`), so a
+    hostile or broken archive cannot grow until the tab dies.
+    The point of this route is that Notion itself does the Markdown
+    conversion — headings, tables, code, callouts, database rows — and
+    `recursive: true` brings the child pages along for free. Scraping the
+    rendered page, which is what every competing extension does, loses all of
+    that and cannot reach a child page at all; `loadPageChunk`, the other
+    private API, broke in 2021, 2024 and again in August 2026, while the
+    export request body has not changed since 2019 (notion-py →
+    notion-exporter → Notion-Backup). Same risk profile as Google's
+    `batchexecute` (#9/#11): a private API called same-origin from the content
+    script with the user's own session cookie, and no server of ours anywhere
+    in the middle (#10).
+    **Depth 1 is a filter on zip paths, not a second request.**
+    `flattenExportFiletree: false` lays the export out as `Parent <id>.md`,
+    `Parent <id>/Child <id>.md`, `Parent <id>/Child <id>/Grand.md`, so
+    `pickPages` keeps the `.md` entries at most one level below the shallowest
+    `.md` (depth is relative to the root page's own directory, so the
+    `Export-<uuid>/` wrapper does not eat a level) and database rows
+    (`Parent/DB <id>/Row.md`) drop out by themselves. Ceiling:
+    over a huge subtree `recursive: true` over-exports and can take minutes —
+    the upgrade path, if it ever hurts, is listing the children and exporting
+    each one non-recursively. The checkbox that sets `recursive` is the only
+    way this surface can produce more than one source, so it is also the gate
+    point (#15) — and a ticked box that yields nothing but the root page is
+    still one source, so `noteTrialUse()` runs on the real file count, not on
+    the checkbox.
+    **Two hosts, two paths: `app.notion.com` and `*.notion.site`.** The app
+    moved to `app.notion.com` and `www.notion.so/<id>` 302s to
+    `app.notion.com/p/<slug-id>` (checked 2026-09-19); both hosts sit in
+    `content_scripts` only — **not** in `host_permissions`, because every
+    Notion call is same-origin from the content script, and an MV3 content
+    script gets no cross-origin fetch privilege from a host permission anyway,
+    so the grant would be wider than the code uses and wider than the store
+    review needs to see. One `dist/notion.js` serves both. On a published site the export endpoint answers **401** — it
+    is for members of the workspace, and a public reader is not one (verified
+    live 2026-09-19) — so `notion-public.ts` reads the page's own block JSON
+    instead, with the same calls the site itself makes, same-origin, no auth:
+    `loadCachedPageChunk` (`{page:{id}, limit:50, cursor, chunkNumber,
+    verticalColumns:false}`, paginated while `cursor.stack` is non-empty),
+    then `syncRecordValuesMain` for the ids the chunks referenced but did not
+    carry (`missingBlockIds`, batches of 100, at most three rounds — a block
+    we may not read never arrives), and `lib/notion-blocks.ts` turns the
+    merged record map into Markdown. This is the `loadPageChunk` family the
+    paragraph above calls brittle, and that is accepted **only here**, because
+    on a public page there is no export to prefer: the alternative is scraping
+    the DOM, which loses tables, child pages and database rows.
+    **Database rows come from `queryCollection`, not from `content[]`.** A
+    database page is a `collection_view_page` block whose rows exist only as
+    the result of a view query, so the row ids are fetched with
+    `queryCollection` against `view_ids[0]` (the first view is what the
+    visitor sees) with a `collection_group_results` reducer, and each row id is
+    then a page of its own. With the checkbox off, a database page would be a
+    bare title, so the root file gets an `## Entries` list of the row titles
+    (`entriesSection`) instead; with it on, every row becomes its own source,
+    as do the child pages and the rows of any inline database — depth 1 in all
+    three cases.
+    **Cap: 300 files** on both paths, NotebookLM's Pro ceiling; past it the
+    upload would fail anyway, so the public run stops collecting there and
+    says so in the progress line, and the export path slices its result to the
+    same number. Requests are sequential, with a 150 ms pause between chunks
+    of one page and between pages (the `syncRecordValuesMain` batches that
+    fill in the missing ids run back to back) — a public site is someone
+    else's bandwidth, and nothing here is worth a rate limit.
+    **When the public path breaks:** open the published page with DevTools on
+    Network, watch what the site's own XHR posts to `/api/v3/*`, and mirror
+    it — same rule as for the export body and the notebook RPC.
+    **Verified by hand on 2026-09-19:** the
+    two API calls work same-origin with exactly the body `exportTaskBody`
+    builds (the server echoes it back with `block.spaceId` filled in — we do
+    not have to send it), and `fetch(exportURL, {credentials:'include'})`
+    against the signed `file.notion.com` URL answers 200 `application/zip`
+    cross-origin. So there is **no relay and no extra host permission**. If
+    Notion ever tightens CORS there, the fix is a ~5-line relay through
+    `background.ts` plus `https://file.notion.com/*` in `host_permissions`
+    (an extension-origin fetch ignores CORS) — the narrowest possible
+    widening of #3's stateless worker; `exportPages` already turns the bare
+    TypeError such a refusal produces into "Notion blocked the export
+    download — reload the page and try again" so it reaches the user instead
+    of the console.
+    **When it breaks:** open Notion's own ••• → Export dialog with DevTools on
+    Network and diff its `enqueueTask` body against `exportTaskBody` — that
+    request is the only reliable specification of this protocol, exactly the
+    same rule as for the notebook RPC.
 
 ## NotebookLM limits (warning logic in Preview)
 

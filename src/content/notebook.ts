@@ -19,7 +19,8 @@ import { callRpc, RpcError } from './rpc';
 export type NotebookSummary = { id: string; title: string; emoji?: string };
 export type YoutubeVideoJob = { videoId: string; title: string; url: string };
 // ADD_YOUTUBE: despite the name this job type now also carries plain URL
-// sources and an optional captured-page file (added source-lm) — the type
+// sources and ready-made Markdown files — a captured page, a selection, or a
+// Notion page plus its children (notion-ui.ts) — the type
 // string and storage key stay unchanged (popup.ts and youtube-ui.ts both
 // write it, renaming buys nothing).
 export type YoutubeJob = {
@@ -28,9 +29,9 @@ export type YoutubeJob = {
   createdAt: number;
   targetNotebookId?: string;
   createTitle?: string;
-  file?: { filename: string; markdown: string };
+  files?: { filename: string; markdown: string }[];
   // "Fix a broken source" hand-off (DECISIONS.md #16): the id of the source
-  // `file` replaces. Deleted only after the upload succeeded, never before.
+  // `files` replaces. Deleted only after every upload succeeded, never before.
   replaceSourceId?: string;
 };
 
@@ -450,7 +451,7 @@ export async function runYoutubeJob(
     }
     if (!job) return;
 
-    const total = job.videos.length + (job.file ? 1 : 0);
+    const total = job.videos.length + (job.files?.length ?? 0);
     const wasCreated = !job.targetNotebookId;
     let notebookId = job.targetNotebookId ?? null;
     if (!notebookId && job.createTitle !== undefined) {
@@ -536,44 +537,54 @@ export async function runYoutubeJob(
       });
     }
 
-    // Captured-page upload has no DOM fallback (DECISIONS.md #9's
-    // dual RPC/DOM path covers only the JSON queue, not this file) — if the
+    // Ready-made Markdown upload has no DOM fallback (DECISIONS.md #9's
+    // dual RPC/DOM path covers only the JSON queue, not these files) — if the
     // RPC file path breaks, this reports an error instead of retrying via
-    // DOM injection. Upgrade path: route job.file through runUpload instead
+    // DOM injection. Upgrade path: route job.files through runUpload instead
     // of calling uploadFile directly.
-    if (job.file && uploadFile) {
-      try {
-        await uploadFile(notebookId, job.file);
-        counters.uploaded += 1;
-        // Only now, and only on success: the broken source being replaced is
-        // the user's only copy of that page in the notebook, so a failed
-        // upload must leave it alone (DECISIONS.md #16). A failed delete is not
-        // a failed upload either — report it, don't count it.
-        if (job.replaceSourceId) {
-          try {
-            await deleteSources(notebookId, [job.replaceSourceId]);
-          } catch (err) {
-            send({
-              type: 'UPLOAD_ERROR',
-              message: `Replacement added, but the broken source could not be deleted: ${err instanceof Error ? err.message : String(err)}`,
-            });
-          }
+    if (job.files?.length && uploadFile) {
+      let allUploaded = true;
+      for (const [index, file] of job.files.entries()) {
+        try {
+          await uploadFile(notebookId, file);
+          counters.uploaded += 1;
+        } catch (err) {
+          allUploaded = false;
+          counters.failed += 1;
+          lastError = err instanceof Error ? err.message : String(err);
+          send({
+            type: 'UPLOAD_ERROR',
+            message: lastError,
+            filename: file.filename,
+          });
         }
-      } catch (err) {
-        counters.failed += 1;
-        lastError = err instanceof Error ? err.message : String(err);
         send({
-          type: 'UPLOAD_ERROR',
-          message: lastError,
-          filename: job.file.filename,
+          type: 'UPLOAD_PROGRESS',
+          done: counters.uploaded + counters.failed + counters.skipped,
+          total,
+          current: file.filename,
         });
+        // The same 2s spacing the bulk RPC queue keeps between batches
+        // (uploader.ts:runRpcBatches) — a Notion page with its children
+        // arrives here as a dozen files back to back.
+        if (index + 1 < job.files.length) {
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
       }
-      send({
-        type: 'UPLOAD_PROGRESS',
-        done: counters.uploaded + counters.failed + counters.skipped,
-        total,
-        current: job.file.filename,
-      });
+      // Only now, and only if every file made it: the broken source being
+      // replaced is the user's only copy of that page in the notebook, so a
+      // failed upload must leave it alone (DECISIONS.md #16). A failed delete is
+      // not a failed upload either — report it, don't count it.
+      if (job.replaceSourceId && allUploaded) {
+        try {
+          await deleteSources(notebookId, [job.replaceSourceId]);
+        } catch (err) {
+          send({
+            type: 'UPLOAD_ERROR',
+            message: `Replacement added, but the broken source could not be deleted: ${err instanceof Error ? err.message : String(err)}`,
+          });
+        }
+      }
     }
   } finally {
     if (job && !handedOff) {

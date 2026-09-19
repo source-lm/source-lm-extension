@@ -39,6 +39,11 @@
       "matches": ["https://www.youtube.com/*"],
       "js": ["dist/youtube.js"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://app.notion.com/*", "https://*.notion.site/*"],
+      "js": ["dist/notion.js"],
+      "run_at": "document_idle"
     }
   ]
 }

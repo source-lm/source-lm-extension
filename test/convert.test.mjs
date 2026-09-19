@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import esbuild from 'esbuild';
+import zlib from 'node:zlib';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const libDir = path.join(__dirname, '../src/lib');
@@ -22,6 +23,9 @@ const result = esbuild.buildSync({
       export { monthKey, trialLeft, spendTrial, FREE_QUOTA, loadTrial } from './license';
       export { parseUrlList } from './url-list';
       export { pageToMarkdown, captureFilename } from './capture';
+      export { notionPageId, exportTaskBody, unzipEntries, pickPages } from './notion-export';
+      export { blockValue, richText, mergeRecordMaps, missingBlockIds, entriesSection } from './notion-blocks';
+      export { pageToMarkdown as notionPageToMarkdown } from './notion-blocks';
     `,
     resolveDir: libDir,
     loader: 'ts',
@@ -62,6 +66,16 @@ const {
   parseUrlList,
   pageToMarkdown,
   captureFilename,
+  notionPageId,
+  exportTaskBody,
+  unzipEntries,
+  pickPages,
+  blockValue,
+  richText,
+  mergeRecordMaps,
+  missingBlockIds,
+  notionPageToMarkdown,
+  entriesSection,
 } = lib;
 
 const rpcResult = esbuild.buildSync({
@@ -1405,4 +1419,270 @@ test('uploader: findAddSourceButton falls back to the mat-icon ligature inside t
   // The Russian locale still matches on the first pass, panel or no panel.
   const ruAdd = button('Добавить источник', null, null);
   assert.equal(findAddSourceButton(page([ruAdd], null)), ruAdd);
+});
+
+// A zip built by hand so the reader is tested against the format, not against
+// whatever some fixture file happens to contain. Sizes live only in the central
+// directory here — that is where unzipEntries must read them.
+function buildZip(files) {
+  const locals = [];
+  const central = [];
+  let offset = 0;
+  for (const f of files) {
+    const name = Buffer.from(f.name);
+    const body = f.method === 8 ? zlib.deflateRawSync(f.data) : f.data;
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(f.method, 8);
+    local.writeUInt16LE(name.length, 26);
+    locals.push(local, name, body);
+    const entry = Buffer.alloc(46);
+    entry.writeUInt32LE(0x02014b50, 0);
+    entry.writeUInt16LE(f.method, 10);
+    entry.writeUInt32LE(body.length, 20);
+    entry.writeUInt32LE(f.data.length, 24);
+    entry.writeUInt16LE(name.length, 28);
+    entry.writeUInt32LE(offset, 42);
+    central.push(entry, name);
+    offset += 30 + name.length + body.length;
+  }
+  const cd = Buffer.concat(central);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(files.length, 8);
+  eocd.writeUInt16LE(files.length, 10);
+  eocd.writeUInt32LE(cd.length, 12);
+  eocd.writeUInt32LE(offset, 16);
+  return Buffer.concat([...locals, cd, eocd]);
+}
+
+test('notion: page id, depth filter and the zip reader', async () => {
+  // Synthetic, not a real workspace's id — this repository is public.
+  const ID = '0123456789abcdef'.repeat(2);
+  const UUID = '01234567-89ab-cdef-0123-456789abcdef';
+  assert.equal(notionPageId(`https://www.notion.so/My-Page-${ID}`), UUID);
+  // Peek overlay: the pathname holds the parent, "?p=" the page on screen.
+  assert.equal(notionPageId(`https://www.notion.so/Parent-${'a'.repeat(32)}?p=${ID}&pm=s`), UUID);
+  assert.equal(notionPageId('https://www.notion.so/login'), null);
+
+  const CHILD = 'b'.repeat(32);
+  const entry = (path, text) => ({ path, data: Buffer.from(text) });
+  const pages = pickPages([
+    entry(`Export-xyz/Root ${ID}/Child ${CHILD}.md`, '# Child'),
+    entry(`Export-xyz/Root ${ID}/Child ${CHILD}/Grand ${CHILD}.md`, '# Grand'),
+    entry(`Export-xyz/Root ${ID}/DB ${CHILD}/Row ${CHILD}.md`, '# Row'),
+    entry(`Export-xyz/Root ${ID}/DB ${CHILD}.csv`, 'a,b'),
+    entry(`Export-xyz/Root ${ID}.md`, '# Root'),
+  ]);
+  // Root first even though it came last; grandchild, database row and CSV out.
+  assert.deepEqual(
+    pages.map((p) => p.title),
+    ['Root', 'Child'],
+  );
+  assert.equal(pages[0].filename, '[notion.so]-root.md');
+  assert.equal(pages[1].markdown, '# Child');
+
+  // Box unticked (maxDepth 0): every .md at the shallowest depth, none below.
+  assert.deepEqual(
+    pickPages(
+      [
+        entry(`Export-xyz/Root ${ID}.md`, '# Root'),
+        entry(`Export-xyz/Sibling ${CHILD}.md`, '# Sibling'),
+        entry(`Export-xyz/Root ${ID}/Child ${CHILD}.md`, '# Child'),
+      ],
+      0,
+    ).map((p) => p.title),
+    ['Root', 'Sibling'],
+  );
+
+  const body = exportTaskBody(UUID, true, 'UTC');
+  assert.equal(body.task.request.recursive, true);
+  assert.equal(body.task.request.exportOptions.exportType, 'markdown');
+
+  const nested = buildZip([
+    { name: `Export-xyz/Root ${ID}/Child ${CHILD}.md`, data: Buffer.from('# Child'), method: 8 },
+  ]);
+  const zip = buildZip([
+    { name: 'Export-xyz/', data: Buffer.alloc(0), method: 0 },
+    { name: `Export-xyz/Root ${ID}.md`, data: Buffer.from('# Root'), method: 0 },
+    { name: `Export-xyz/Root ${ID}/Notes ${CHILD}.md`, data: Buffer.from('# Notes'.repeat(50)), method: 8 },
+    { name: 'nested.zip', data: nested, method: 0 },
+  ]);
+  const entries = await unzipEntries(new Uint8Array(zip).buffer);
+  // Directory entry skipped; the nested zip contributes its inner path.
+  assert.deepEqual(entries.map((e) => e.path), [
+    `Export-xyz/Root ${ID}.md`,
+    `Export-xyz/Root ${ID}/Notes ${CHILD}.md`,
+    `Export-xyz/Root ${ID}/Child ${CHILD}.md`,
+  ]);
+  const text = (i) => Buffer.from(entries[i].data).toString();
+  assert.equal(text(0), '# Root');
+  assert.equal(text(1), '# Notes'.repeat(50));
+  assert.equal(text(2), '# Child');
+
+  // Zips inside zips stop at depth 2 — a wrapper, not a rabbit hole.
+  const wrap = (inner) => buildZip([{ name: 'inner.zip', data: inner, method: 0 }]);
+  await assert.rejects(
+    unzipEntries(new Uint8Array(wrap(wrap(wrap(nested)))).buffer),
+    /nested too deep/,
+  );
+});
+
+test('notion blocks: record map shapes, rich text and the block walk', () => {
+  // Both wrappers live in one response: the current double one and the older
+  // single one (the header below).
+  const map = { block: {}, collection: {} };
+  const put = (b, plain) => {
+    map.block[b.id] = plain ? { role: 'reader', value: b } : { spaceId: 's', value: { value: b, role: 'reader' } };
+  };
+  const t = (s) => [[s]];
+  put({
+    id: 'root',
+    type: 'page',
+    properties: {
+      title: [
+        ['Hello '],
+        ['bold', [['b']]],
+        [' '],
+        ['link', [['a', 'https://x.dev']]],
+        [' '],
+        ['‣', [['lm', { href: 'https://site.com/', title: 'Site title' }]]],
+        [' '],
+        ['‣', [['p', 'child']]],
+      ],
+    },
+    content: ['h1', 'b1', 'td1', 'td2', 'tg1', 'q1', 'co1', 'cd1', 'dv1', 'tb1', 'bm1', 'im1', 'cl1', 'child', 'linked', 'al1', 'db1', 'ghost'],
+  });
+  put({ id: 'h1', type: 'header', properties: { title: t('  Section') } }, true); // leading space, trimmed
+  put({ id: 'b1', type: 'bulleted_list', properties: { title: t('Bullet') }, content: ['n1', 'n2'] });
+  put({ id: 'n1', type: 'numbered_list', properties: { title: t('First') } });
+  put({ id: 'n2', type: 'numbered_list', properties: { title: t('Second') } });
+  put({ id: 'td1', type: 'to_do', properties: { title: t('Done'), checked: t('Yes') } });
+  put({ id: 'td2', type: 'to_do', properties: { title: t('Open') } });
+  put({ id: 'tg1', type: 'toggle', properties: { title: t('Toggle') }, content: ['tgk'] });
+  put({ id: 'tgk', type: 'text', properties: { title: t('Folded') } });
+  put({ id: 'q1', type: 'quote', properties: { title: t('Wise words') } });
+  put({ id: 'co1', type: 'callout', format: { page_icon: '\u{1F4A1}' }, properties: { title: t('Heads up') }, content: ['co1a'] });
+  put({ id: 'co1a', type: 'text', properties: { title: t('Inside') } });
+  put({ id: 'cd1', type: 'code', properties: { title: t('const a = 1;'), language: t('TypeScript') } });
+  put({ id: 'dv1', type: 'divider' });
+  put({
+    id: 'tb1',
+    type: 'table',
+    format: { table_block_column_order: ['cA', 'cB'], table_block_column_header: true },
+    content: ['tr1', 'tr2'],
+  });
+  put({ id: 'tr1', type: 'table_row', properties: { cA: t('Name'), cB: t('Value') } });
+  put({ id: 'tr2', type: 'table_row', properties: { cA: t('Alpha'), cB: t('1') } });
+  put({ id: 'bm1', type: 'bookmark', properties: { title: t('Bookmarked'), link: t('https://ex.com/a'), description: t('A description') } });
+  put({ id: 'im1', type: 'image', properties: { caption: t('A caption'), source: t('https://signed.example/x?token=1') } });
+  put({ id: 'cl1', type: 'column_list', content: ['cm1'] });
+  put({ id: 'cm1', type: 'column', content: ['cmt'] });
+  put({ id: 'cmt', type: 'text', properties: { title: t('In a column') } });
+  put({ id: 'child', type: 'page', parent_id: 'root', properties: { title: t('Child Page') }, content: ['ghostkid'] });
+  put({ id: 'linked', type: 'page', parent_id: 'elsewhere', properties: { title: t('Linked Page') } });
+  put({ id: 'al1', type: 'alias', format: { alias_pointer: { id: 'linked' } } });
+  put({ id: 'db1', type: 'collection_view', format: { collection_pointer: { id: 'col1', spaceId: 'space-9' } }, view_ids: ['view-1'] });
+  map.collection.col1 = { spaceId: 's', value: { value: { id: 'col1', name: t('Tasks') } } };
+
+  assert.equal(blockValue(map, 'root').type, 'page'); // double wrapper
+  assert.equal(blockValue(map, 'h1').type, 'header'); // single wrapper
+  assert.equal(richText([['x', [['c'], ['i']]]]), '*`x`*');
+  // Only http(s) becomes a link; ")" would close the target early.
+  assert.equal(richText([['click me', [['a', 'javascript:alert(1)']]]]), 'click me');
+  assert.equal(richText([['ok', [['a', 'https://x.dev/a(b)']]]]), '[ok](https://x.dev/a(b%29)');
+
+  const page = notionPageToMarkdown(map, 'root', 'example.notion.site');
+  assert.equal(
+    page.markdown,
+    [
+      '# Hello **bold** [link](https://x.dev) [Site title](https://site.com/) [Child Page](https://example.notion.site/child)',
+      '',
+      '## Section',
+      '',
+      '- Bullet',
+      '  1. First',
+      '  2. Second',
+      '- [x] Done',
+      '- [ ] Open',
+      '- Toggle',
+      '  Folded',
+      '',
+      '> Wise words',
+      '',
+      '> \u{1F4A1} Heads up',
+      '> Inside',
+      '',
+      '```typescript',
+      'const a = 1;',
+      '```',
+      '',
+      '---',
+      '',
+      '| Name | Value |',
+      '| --- | --- |',
+      '| Alpha | 1 |',
+      '',
+      '[Bookmarked](https://ex.com/a)',
+      'A description',
+      '',
+      '[image: A caption]',
+      '',
+      'In a column',
+      '',
+      '- [Child Page](https://example.notion.site/child)',
+      '- [Linked Page](https://example.notion.site/linked)',
+      '- [Linked Page](https://example.notion.site/linked)',
+      '',
+      '**Database: Tasks**',
+      '',
+    ].join('\n'),
+  );
+  // Signed file URLs expire in an hour; they never reach the source.
+  assert.ok(!page.markdown.includes('signed.example'));
+  assert.equal(
+    page.filename,
+    '[example.notion.site]-hello-bold-link-https-x-dev-site-title-https-site-com-child.md',
+  );
+  assert.deepEqual(page.childPages, [{ id: 'child', title: 'Child Page' }]);
+  assert.deepEqual(page.databases, [
+    { blockId: 'db1', collectionId: 'col1', viewId: 'view-1', spaceId: 'space-9', name: 'Tasks' },
+  ]);
+  // A content id with no block is skipped in the markdown and reported instead;
+  // the child page's own children belong to its own fetch, not to this one.
+  assert.deepEqual(missingBlockIds(map, 'root'), ['ghost']);
+
+  const into = { block: { a: 1 } };
+  assert.equal(mergeRecordMaps(into, { block: { b: 2 }, collection: { c: 3 } }), into);
+  assert.deepEqual(into, { block: { a: 1, b: 2 }, collection: { c: 3 } });
+
+  // Database rows listed in the page's own file (notion-public.ts, recursive
+  // off): a row with no loaded block still gets a line, never a hole.
+  assert.equal(entriesSection(map, []), '');
+  assert.equal(
+    entriesSection(map, ['child', 'ghost'], 'example.notion.site'),
+    '\n## Entries\n\n- [Child Page](https://example.notion.site/child)\n- [Untitled](https://example.notion.site/ghost)\n',
+  );
+
+  // A database page is its own first database ref (notion-public.ts takes
+  // databases[0]), but it never announces itself in its own body.
+  put({
+    id: 'droot',
+    type: 'collection_view_page',
+    format: { collection_pointer: { id: 'col1', spaceId: 'space-9' } },
+    view_ids: ['view-1'],
+    properties: { title: t('Tasks') },
+  });
+  const dbPage = notionPageToMarkdown(map, 'droot', 'example.notion.site');
+  assert.equal(dbPage.markdown, '# Tasks\n');
+
+  // A content[] pointing back at an ancestor terminates, and the block it
+  // points through is rendered once, not once per turn of the loop.
+  const cyc = { block: {} };
+  cyc.block.croot = { spaceId: 's', value: { value: { id: 'croot', type: 'page', properties: { title: t('Loop') }, content: ['c1'] } } };
+  cyc.block.c1 = { spaceId: 's', value: { value: { id: 'c1', type: 'text', properties: { title: t('Body') }, content: ['croot'] } } };
+  assert.equal(notionPageToMarkdown(cyc, 'croot', 'example.notion.site').markdown, '# Loop\n\nBody\n');
+  assert.deepEqual(dbPage.databases, [
+    { blockId: 'droot', collectionId: 'col1', viewId: 'view-1', spaceId: 'space-9', name: 'Tasks' },
+  ]);
 });

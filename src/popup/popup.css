@@ -963,6 +963,9 @@ progress::-webkit-progress-value {
 
 #url-notebook {
   height: 36px;
+  /* Direct child of .actionbar, not of .actions — the flex gap that spaces
+     the YouTube bar's select from its button does not reach it. */
+  margin-bottom: 8px;
 }
 
 #btn-add-url {

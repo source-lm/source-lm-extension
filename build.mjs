@@ -23,6 +23,7 @@ const targets = [
   ['src/popup/popup.ts', 'dist/popup.js'],
   ['src/content/uploader.ts', 'dist/content.js'],
   ['src/content/youtube.ts', 'dist/youtube.js'],
+  ['src/content/notion.ts', 'dist/notion.js'],
   ['src/background.ts', 'dist/background.js'],
 ];
 

@@ -41,7 +41,7 @@ export async function loadSettings(): Promise<Settings> {
   const stored = await storage.sync.get('settings');
   return {
     ...DEFAULT_SETTINGS,
-    ...(stored.settings ?? {}),
+    ...stored.settings,
     filename_pattern: patternFromPrefix(stored.settings?.filename_pattern ?? DEFAULT_SETTINGS.filename_pattern),
   };
 }

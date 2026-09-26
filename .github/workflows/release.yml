@@ -49,6 +49,7 @@ jobs:
 
       - run: npm test
       - run: npx tsc --noEmit
+      - run: npm run lint
 
       # Storefront values are public (they end up in dist/popup.js) but must be
       # the LIVE ones: without them license.ts falls back to REPLACE-ME and an

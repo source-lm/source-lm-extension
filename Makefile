@@ -1,4 +1,4 @@
-.PHONY: all install build watch test typecheck package clean
+.PHONY: all install build watch test typecheck lint package clean
 
 all: build
 
@@ -19,6 +19,9 @@ test: node_modules
 
 typecheck: node_modules
 	npx tsc --noEmit
+
+lint: node_modules
+	npm run lint
 
 package: node_modules
 	npm run package

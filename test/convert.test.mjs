@@ -919,6 +919,18 @@ test('chunker+cursor: incremental run continues numbering and skips already-uplo
   assert.equal(recordsAfter(records, f, stateAfterRepack.cursor).length, 0);
 });
 
+test('cursor: object-valued dates/ids (MongoDB Extended JSON) stay distinct and ordered', () => {
+  const records = [
+    { _id: { $oid: 'a1' }, date: { $date: '2024-01-01T10:00:00Z' }, text: 'one' },
+    { _id: { $oid: 'a2' }, date: { $date: '2024-01-02T10:00:00Z' }, text: 'two' },
+    { _id: { $oid: 'a3' }, date: { $date: '2024-01-03T10:00:00Z' }, text: 'three' },
+  ];
+  const f = { ...detectFields(records, settings({})), dateField: 'date' };
+  const cursors = records.map((r, i) => slugify(recordCursor(r, f, i + 1)));
+  assert.equal(new Set(cursors).size, 3, 'no shared "[object Object]" cursor');
+  assert.deepEqual(recordsAfter(records, f, cursors[0]), [records[1], records[2]]);
+});
+
 test('settings: a legacy pattern without {cursor} is repaired and reconciles', () => {
   const repaired = patternFromPrefix('{source}-{index}.md');
   assert.match(repaired, /\{cursor\}/);

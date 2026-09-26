@@ -89,6 +89,8 @@ function ensureFilterInput(sortBtn: HTMLElement): void {
 
   ensureToolbar(sortBtn, input, 0);
   filterInput = input;
+  // A rebuilt toolbar starts with an empty query: unhide rows the old input hid.
+  applyFilter();
 }
 
 // After NotebookLM's redesign the page's icon font only carries its own

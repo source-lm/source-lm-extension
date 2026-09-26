@@ -15,7 +15,7 @@
 // prefix, and nothing is selected by CSS class (DECISIONS.md #5).
 
 import { extractNotebookId, showJobToast, waitFor } from './uploader';
-import { findSortButton, sourceRow, attachTooltip } from './delete-ui';
+import { findSortButton, sourceRow, attachTooltip, ensureToolbar } from './delete-ui';
 import { findDuplicateIds, listSources } from './notebook';
 import type { FixEntry, SourceInfo } from './notebook';
 
@@ -60,30 +60,34 @@ function ensureFilterInput(sortBtn: HTMLElement): void {
 
   const input = document.createElement('input');
   input.type = 'search';
-  input.placeholder = 'Filter sources';
+  input.placeholder = 'Filter';
   input.setAttribute('aria-label', 'Filter sources');
   // Material-style pill: no border, a faint tint of the header's own text
   // color as the surface — works in light and dark themes without hardcoding
-  // either. Chrome's focus ring follows the radius, so it reads as M3 focus.
+  // either. Font and text colour match NotebookLM's "Search the web" input
+  // (measured; that input has no locale-free handle to read them from, see
+  // DECISIONS.md #5). ::placeholder cannot be styled inline; Chrome's default
+  // (#757575) equals theirs in light theme and is slightly dimmer in dark.
+  // 88px is the minimum that decides inline vs own-row placement
+  // (placeToolbar); flex-grow only takes space left over after that, up to
+  // max-width so a wide panel does not stretch it end to end.
   input.style.cssText = [
-    'font:inherit',
-    'font-size:13px',
+    'font:400 15px/20px "Google Sans Flex","Google Sans",Roboto,sans-serif',
+    'color:var(--mat-sys-on-surface, currentColor)',
+    'outline:none',
     'width:88px',
+    'flex:1 0 88px',
+    'max-width:240px',
     'height:28px',
     'box-sizing:border-box',
-    'margin-right:4px',
     'padding:0 10px',
     'border:none',
     'border-radius:14px',
     'background:color-mix(in srgb, currentColor 8%, transparent)',
-    'color:inherit',
   ].join(';');
   input.addEventListener('input', applyFilter);
 
-  // In-header placement. If a locale ever makes the header too narrow for
-  // 88px, give the input its own row above the header instead:
-  // sortBtn.closest('div')?.insertAdjacentElement('beforebegin', input).
-  sortBtn.insertAdjacentElement('beforebegin', input);
+  ensureToolbar(sortBtn, input, 0);
   filterInput = input;
 }
 
@@ -135,7 +139,7 @@ function buildIconButton(
   }
   btn.classList.remove('mat-mdc-menu-trigger', 'source-sort-button');
   btn.type = 'button';
-  btn.style.cssText = 'margin-left:4px';
+  btn.style.cssText = '';
   btn.setAttribute('aria-label', label);
   // Same hand-drawn pill as the Delete button (Angular's MatTooltip does
   // not survive cloneNode).
@@ -326,14 +330,14 @@ function ensureUi(): void {
     brokenBtn = buildIconButton(sortBtn, 'link_off', 'Broken sources', () => {
       void onShowBroken();
     });
-    sortBtn.insertAdjacentElement('afterend', brokenBtn);
+    ensureToolbar(sortBtn, brokenBtn, 2);
   }
 
   if (!dupBtn || !dupBtn.isConnected) {
     dupBtn = buildIconButton(sortBtn, 'difference', 'Select duplicate sources', () => {
       void onSelectDuplicates();
     });
-    sortBtn.insertAdjacentElement('afterend', dupBtn);
+    ensureToolbar(sortBtn, dupBtn, 1);
   }
 }
 

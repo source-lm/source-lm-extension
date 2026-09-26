@@ -25,6 +25,13 @@ export type VideoItem = { videoId: string; title: string; url: string };
 const ACTION_ROW_SEL =
   'yt-page-header-renderer, yt-page-header-view-model, yt-flexible-actions-view-model, ytd-playlist-header-renderer';
 
+// Ad cards promote a real video through a plain /watch?v= link, so the id
+// check lets them through — and their CTA anchor ("Watch" or its translation in
+// the UI language) becomes the row's title via the dedupe backfill. Matched by
+// container tag, not by that text, so it holds in every UI language.
+const AD_SEL =
+  'ytd-ad-slot-renderer, ytd-in-feed-ad-layout-renderer, ytd-promoted-video-renderer, ytd-promoted-sparkles-web-renderer, ytd-search-pyv-renderer, ytd-display-ad-renderer';
+
 // videoId is in the v= query parameter — match it regardless of what comes
 // before/after (&list=, &t=42s, etc.), stopping at the next delimiter.
 const VIDEO_ID_RE = /[?&]v=([^&#]+)/;
@@ -105,7 +112,7 @@ export function visiblePageRoot(doc: Document = document): ParentNode {
 }
 
 // Page-wide scan of every /watch?v= anchor under `root`, minus the header
-// action-row false positives (ACTION_ROW_SEL). This is the right tool for a
+// action-row false positives (ACTION_ROW_SEL) and ad cards (AD_SEL). This is the right tool for a
 // video grid/list (playlist panel, playlist page, channel grid) — a caller
 // that passes an explicit root already scoped to one of those. It is the
 // wrong tool for the watch page itself: see collectPageVideos below, which
@@ -118,7 +125,7 @@ export function collectVideos(root: ParentNode = visiblePageRoot()): VideoItem[]
     const href = anchor.getAttribute('href') || '';
     const videoId = extractVideoId(href);
     if (!videoId) continue;
-    if (anchor.closest(ACTION_ROW_SEL)) continue;
+    if (anchor.closest(`${ACTION_ROW_SEL}, ${AD_SEL}`)) continue;
 
     videos.push({
       videoId,
@@ -128,7 +135,7 @@ export function collectVideos(root: ParentNode = visiblePageRoot()): VideoItem[]
   }
 
   // A title-less entry after dedupe means only a thumbnail for it exists on
-  // the page (ad slot, half-rendered lazy card) — drop it instead of
+  // the page (half-rendered lazy card) — drop it instead of
   // inventing a placeholder title.
   return dedupeVideos(videos).filter((v) => v.title);
 }

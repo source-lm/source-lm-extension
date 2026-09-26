@@ -652,6 +652,29 @@ test('youtube: collectVideos skips playlist header action buttons ("Play all") t
   assert.equal(videos[0].title, 'Real Video Title');
 });
 
+test('youtube: collectVideos skips ad cards whose CTA anchor ("Watch") would become the title', () => {
+  // A promoted video links to a plain /watch?v= URL: title-less thumbnail
+  // first, then the CTA button, whose aria-label the dedupe backfills.
+  const inAd = (sel) => (sel.includes('ytd-ad-slot-renderer') ? {} : null);
+  const adThumb = {
+    getAttribute: (name) => (name === 'href' ? '/watch?v=ad1&pp=x' : null),
+    matches: () => false,
+    querySelector: () => null,
+    closest: inAd,
+  };
+  const adCta = { ...adThumb, getAttribute: (name) => (name === 'href' ? '/watch?v=ad1&pp=x' : name === 'aria-label' ? 'Watch' : null) };
+  const realAnchor = {
+    getAttribute: (name) => (name === 'href' ? '/watch?v=real1' : null),
+    matches: () => false,
+    querySelector: () => null,
+    closest: (sel) => (sel === 'h3, h4' ? { getAttribute: () => null } : null),
+    textContent: 'Real Video Title',
+  };
+  const root = { querySelectorAll: () => [adThumb, adCta, realAnchor] };
+
+  assert.deepEqual(collectVideos(root).map((v) => v.videoId), ['real1']);
+});
+
 test('youtube: collectVideos skips the playlist header hero thumbnail link (yt-page-header-view-model), titled with the playlist name', () => {
   // Current playlist layout uses a view-model header, not the -renderer one
   // covered above — the hero link is a /watch?v= anchor for the first video

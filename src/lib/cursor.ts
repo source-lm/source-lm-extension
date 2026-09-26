@@ -3,15 +3,22 @@ import { slugify } from './markdown-generator';
 
 type Rec = Record<string, unknown>;
 
+// Object values (MongoDB Extended JSON `{"$date": …}` / `{"$oid": …}`) are
+// serialized: `String()` would give every record the same "[object Object]"
+// cursor, and incremental mode would then never find anything new.
+function text(v: unknown): string {
+  return v !== null && typeof v === 'object' ? JSON.stringify(v) : String(v);
+}
+
 function isNonEmpty(v: unknown): boolean {
-  return v !== undefined && v !== null && String(v) !== '';
+  return v !== undefined && v !== null && text(v) !== '';
 }
 
 // Record cursor: date, otherwise id, otherwise ordinal number (idx is the
 // 1-based index in the source array). Used in the filename (via {cursor}).
 export function recordCursor(rec: Rec, f: DetectedFields, idx: number): string {
-  if (f.dateField && isNonEmpty(rec[f.dateField])) return String(rec[f.dateField]);
-  if (isNonEmpty(rec['id'])) return String(rec['id']);
+  if (f.dateField && isNonEmpty(rec[f.dateField])) return text(rec[f.dateField]);
+  if (isNonEmpty(rec['id'])) return text(rec['id']);
   return String(idx);
 }
 

@@ -335,8 +335,9 @@ async function uploadFileViaRpc(notebookId: string, file: UploadFile): Promise<v
     throw new RpcError(`Server did not return an upload URL for file "${file.filename}"`);
   }
   // The URL comes from a response header and is fetched with the user's
-  // cookies — never follow it anywhere but Google.
-  if (!new URL(uploadUrl, location.origin).hostname.endsWith('.google.com')) {
+  // cookies — never follow it anywhere but Google, and only over https.
+  const target = new URL(uploadUrl, location.origin);
+  if (target.protocol !== 'https:' || !target.hostname.endsWith('.google.com')) {
     throw new RpcError(`Refusing to upload "${file.filename}" to a non-Google host`);
   }
 

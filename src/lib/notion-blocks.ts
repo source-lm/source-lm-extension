@@ -5,6 +5,7 @@
 // half lives in the content script, this half stays testable under plain node.
 
 import { captureFilename } from './capture';
+import { notionPageId } from './notion-export';
 
 export type RichText = Array<[string] | [string, unknown[][]]>;
 export type NotionBlock = {
@@ -99,7 +100,7 @@ function decorate(text: string, decos: unknown[][], map?: RecordMap, host?: stri
     else if (kind === 'u') out = '@user';
     else if (kind === 'd' && obj.start_date)
       out = `${obj.start_date}${obj.end_date ? ` → ${obj.end_date}` : ''}`;
-    else if (kind === 'lm') out = `[${obj.title || obj.href || out}](${obj.href ?? ''})`;
+    else if (kind === 'lm') out = webLink(obj.title || obj.href || out, obj.href ?? '', host);
     else if (kind === 'p') out = pageLink(map, String(arg ?? ''), 'page', host);
   }
   // A mention kind nobody handled leaves Notion's bare placeholder glyph
@@ -163,6 +164,55 @@ type Ctx = { map: RecordMap; pageId: string; host: string; seen: Set<string> } &
   'childPages' | 'databases'
 >;
 
+const UUID_RE = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+
+// Records a page as linked, unless it is not a real id, is the page itself,
+// or is already recorded. A mention or an alias target is an id straight out
+// of the block JSON, never rendered, so it gets no chance to fail elsewhere —
+// this is the one gate it passes through before landing in childPages. Title
+// is the caller's if it already rendered one (the page-block branch), else
+// the record map's, same fallback as pageLink()'s.
+function addLinked(ctx: Ctx, id: string | undefined, title?: string): void {
+  if (!id || !UUID_RE.test(id) || id === ctx.pageId || ctx.childPages.some((p) => p.id === id)) return;
+  const b = blockValue(ctx.map, id);
+  ctx.childPages.push({ id, title: title ?? ((b && richText(b.properties?.title)) || 'Untitled') });
+}
+
+// A link resolves to a page id when it stays on the page's own host —
+// relative ("/<id>") or absolute on the same host — or on Notion itself
+// (an absolute www.notion.so/app.notion.com link on a published site still
+// names a page, just not one this host serves); any other host is external
+// and carries no id here.
+function linkedPageId(href: string, host: string): string | undefined {
+  let u: URL;
+  try {
+    u = new URL(href, `https://${host}/`);
+  } catch {
+    return undefined;
+  }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') return undefined;
+  if (!(u.hostname === host || /(^|\.)notion\.(so|com)$/.test(u.hostname))) return undefined;
+  return notionPageId(u.href) ?? undefined;
+}
+
+// A page mention ('p') or a same-host link ('a', 'lm') anywhere in a block's
+// rich text — title, caption, table cell — marks its target as linked, same
+// as an actual child page. External links are skipped.
+function collectMentions(ctx: Ctx, props: Record<string, RichText> | undefined): void {
+  for (const rt of Object.values(props ?? {})) {
+    if (!Array.isArray(rt)) continue;
+    for (const seg of rt) {
+      for (const d of (seg?.[1] as unknown[][]) ?? []) {
+        const kind = String((d as unknown[])[0] ?? '');
+        const arg = (d as unknown[])[1];
+        if (kind === 'p') addLinked(ctx, String(arg ?? ''));
+        else if (kind === 'a') addLinked(ctx, linkedPageId(String(arg ?? ''), ctx.host));
+        else if (kind === 'lm') addLinked(ctx, linkedPageId((arg as { href?: string })?.href ?? '', ctx.host));
+      }
+    }
+  }
+}
+
 function dbRef(map: RecordMap, b: NotionBlock): DatabaseRef | undefined {
   const ptr = b.format?.collection_pointer as { id?: string; spaceId?: string } | undefined;
   const collectionId = b.collection_id ?? ptr?.id;
@@ -180,10 +230,9 @@ function dbRef(map: RecordMap, b: NotionBlock): DatabaseRef | undefined {
 function tableLines(ctx: Ctx, b: NotionBlock, indent: string): string[] {
   const cols = (b.format?.table_block_column_order as string[] | undefined) ?? [];
   if (!cols.length) return [];
-  const rows = (b.content ?? [])
-    .map((id) => blockValue(ctx.map, id))
-    .filter((r): r is NotionBlock => !!r)
-    .map((r) => cols.map((c) => richText(r.properties?.[c], ctx.map, ctx.host).replace(/[|\n]/g, ' ').trim()));
+  const rowBlocks = (b.content ?? []).map((id) => blockValue(ctx.map, id)).filter((r): r is NotionBlock => !!r);
+  for (const r of rowBlocks) collectMentions(ctx, r.properties);
+  const rows = rowBlocks.map((r) => cols.map((c) => richText(r.properties?.[c], ctx.map, ctx.host).replace(/[|\n]/g, ' ').trim()));
   const head = b.format?.table_block_column_header ? (rows.shift() ?? cols.map(() => '')) : cols.map(() => '');
   const line = (cells: string[]) => `${indent}| ${cells.join(' | ')} |`;
   return [line(head), line(cols.map(() => '---')), ...rows.map(line)];
@@ -205,6 +254,7 @@ function walk(ctx: Ctx, ids: string[], indent: string, depth: number): string[] 
     ctx.seen.add(id);
     const b = blockValue(ctx.map, id);
     if (!b) continue; // not loaded — the caller re-fetches via missingBlockIds()
+    collectMentions(ctx, b.properties);
     const raw = richText(b.properties?.title, ctx.map, ctx.host);
     const text = b.type === 'code' ? raw : raw.trim(); // code keeps its own indentation
     const kids = (pad: string) => out.push(...walk(ctx, b.content ?? [], indent + pad, depth + 1));
@@ -272,12 +322,17 @@ function walk(ctx: Ctx, ids: string[], indent: string, depth: number): string[] 
       const from = (src && blockValue(ctx.map, src)) || b;
       out.push(...walk(ctx, from.content ?? [], indent, depth + 1));
     } else if (b.type === 'page') {
+      // Every page block walk() reaches is a subpage: walk() never descends
+      // into another page's own content, so parentage doesn't need checking.
       const title = text || 'Untitled';
       put(`- [${title}](https://${ctx.host}/${noDashes(b.id ?? id)})`);
-      if (b.parent_id === ctx.pageId) ctx.childPages.push({ id: b.id ?? id, title });
+      addLinked(ctx, b.id ?? id, title);
     } else if (b.type === 'alias') {
       const target = (b.format?.alias_pointer as { id?: string } | undefined)?.id;
-      if (target) put(`- ${pageLink(ctx.map, target, 'Untitled', ctx.host)}`);
+      if (target) {
+        put(`- ${pageLink(ctx.map, target, 'Untitled', ctx.host)}`);
+        addLinked(ctx, target);
+      }
     } else if (b.type === 'collection_view' || b.type === 'collection_view_page') {
       const ref = dbRef(ctx.map, b);
       if (ref) {

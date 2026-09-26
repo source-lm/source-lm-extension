@@ -136,6 +136,11 @@ export async function fetchPublicPages(
   const rootIsDb = blockValue(rootMap, pageId)?.type === 'collection_view_page';
   const inline = root.databases.slice(rootIsDb ? 1 : 0);
 
+  // A mention or a link can name a page outside this workspace — the
+  // visitor's own private space, when they are signed in — and that must
+  // never ride along into the notebook just because the public page named it.
+  const rootSpaceId = blockValue(rootMap, pageId)?.space_id;
+
   const targets: string[] = [];
   const seen = new Set([pageId]);
   // The root file counts against the cap, so 299 targets is the ceiling; past
@@ -179,6 +184,7 @@ export async function fetchPublicPages(
     let page;
     try {
       const loaded = await loadPage(id);
+      if (blockValue(loaded.map, id)?.space_id !== rootSpaceId) continue;
       page = pageToMarkdown(loaded.map, id, host);
       if (loaded.truncated) page.markdown += TRUNCATED;
     } catch {

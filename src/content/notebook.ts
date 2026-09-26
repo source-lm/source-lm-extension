@@ -15,6 +15,7 @@
 // only the logic needed for YouTube sources is ported here.
 
 import { callRpc, RpcError } from './rpc';
+import { noteSuccessfulRun } from '../lib/review';
 
 export type NotebookSummary = { id: string; title: string; emoji?: string };
 export type YoutubeVideoJob = { videoId: string; title: string; url: string };
@@ -588,6 +589,7 @@ export async function runYoutubeJob(
     }
   } finally {
     if (job && !handedOff) {
+      if (counters.uploaded > 0 && counters.failed === 0) await noteSuccessfulRun().catch(() => {}); // before UPLOAD_DONE: the popup re-reads it on that message
       send({
         type: 'UPLOAD_DONE',
         uploaded: counters.uploaded,

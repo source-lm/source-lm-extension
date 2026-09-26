@@ -18,6 +18,7 @@
 
 import { callRpc, RpcError } from './rpc';
 import { listNotebooks, listSourceNames, runYoutubeJob, type JobProgressMessage } from './notebook';
+import { noteSuccessfulRun } from '../lib/review';
 import { installDeleteButton } from './delete-ui';
 import { installSourcesUi } from './sources-ui';
 
@@ -486,6 +487,7 @@ async function runUpload(files: UploadFile[], batchSize: number): Promise<void> 
         await runDomBatches(queue, domFallbackIndex, batchSize, total, counters);
       }
     } finally {
+      if (counters.uploaded > 0 && counters.failed === 0) await noteSuccessfulRun().catch(() => {}); // before UPLOAD_DONE: the popup re-reads it on that message
       send({
         type: 'UPLOAD_DONE',
         uploaded: counters.uploaded,

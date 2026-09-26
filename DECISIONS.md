@@ -40,7 +40,8 @@ the code looks the way it does, not at a style preference.
   rest of the current upload session.
 - `src/content/sources-ui.ts` — the three extras in the Sources panel
   header next to NotebookLM's sort button: a filter box (hides
-  non-matching rows, never unchecks them), «Select duplicate
+  non-matching rows, never unchecks them; the delete button skips
+  hidden rows), «Select duplicate
   sources» (`notebook.ts:listSources` + `findDuplicateIds`, ticks the
   repeats only), and «Broken sources» (lists the sources that failed to
   fetch and parks each one in the `fixQueue` hand-off for the popup —
@@ -484,7 +485,11 @@ the code looks the way it does, not at a style preference.
     bare title, so the root file gets an `## Entries` list of the row titles
     (`entriesSection`) instead; with it on, every row becomes its own source,
     as do the child pages and the rows of any inline database — depth 1 in all
-    three cases.
+    three cases. On a published site, a page linked or `@`-mentioned from the
+    page body (same workspace — a mention into a different one, e.g. the
+    visitor's own private space, is dropped by comparing `space_id`) counts as
+    a depth-1 child too; the `app.notion.com` export path has no equivalent,
+    since Notion's own export walks `content[]`, not rich-text mentions.
     **Cap: 300 files** on both paths, NotebookLM's Pro ceiling; past it the
     upload would fail anyway, so the public run stops collecting there and
     says so in the progress line, and the export path slices its result to the

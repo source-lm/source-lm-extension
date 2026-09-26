@@ -43,6 +43,9 @@ function collectCheckedSources(): CheckedSource[] {
     for (let depth = 0; depth < 10 && el; depth += 1) {
       const buttons = el.querySelectorAll(`[id^="${MORE_BUTTON_ID_PREFIX}"]`);
       if (buttons.length === 1) {
+        // Rows hidden by the filter box (sources-ui.ts) stay checked for chat,
+        // but are never deleted: only what the user sees goes.
+        if (sourceRow(buttons[0] as HTMLElement).style.display === 'none') break;
         const id = buttons[0].id.slice(MORE_BUTTON_ID_PREFIX.length);
         if (id) sources.push({ id, title: input.getAttribute('aria-label') ?? id });
         break;
@@ -80,6 +83,89 @@ export function findSortButton(): HTMLElement | null {
     if (icon && icon.textContent?.trim() === 'sort') return btn;
   }
   return null;
+}
+
+// Our own container for every control we add to the header (filter input,
+// copy/unlink/trash icons). The whole group has two placements, never a
+// partial wrap (issue source-lm-landing#23): inline right after the sort
+// button, or — when that pushes NotebookLM's "Select all" past the header's
+// edge — its own full-width line right below the header.
+//
+// `order` fixes each control's slot; controls are inserted in slot order, so
+// DOM (and Tab) order matches what is on screen whichever interval runs first.
+// Inline, the toolbar (and the sort button's own row-start box, the one
+// NotebookLM style we touch) take up the header's free space, so the filter
+// input can grow into it; growing never causes the overflow checked below.
+const INLINE_CSS = 'display:flex;flex-wrap:nowrap;align-items:center;gap:4px;flex:1 0 auto';
+const OWN_ROW_CSS = 'display:flex;flex-wrap:wrap;align-items:center;gap:4px;width:100%;box-sizing:border-box';
+
+let toolbarEl: HTMLElement | null = null;
+let observedHeader: HTMLElement | null = null;
+let headerWidth = -1;
+// Created on first use: tests import this module under Node, which has no
+// ResizeObserver.
+let headerObserver: ResizeObserver | null = null;
+
+// The header row = the nearest ancestor of the sort button that also holds the
+// "Select all" checkbox. Capped so a header without one (no sources) never
+// climbs into the source list's row checkboxes.
+function findHeader(sortBtn: HTMLElement): HTMLElement | null {
+  let el = sortBtn.parentElement;
+  for (let depth = 0; depth < 4 && el; depth += 1) {
+    if (el.querySelector('input[type=checkbox]')) return el;
+    el = el.parentElement;
+  }
+  return null;
+}
+
+function placeToolbar(): void {
+  const sortBtn = findSortButton();
+  const header = observedHeader;
+  const el = toolbarEl;
+  if (!sortBtn || !header || !el) return;
+
+  // Moving the span blurs whatever is focused inside it (the filter input).
+  const focused = el.contains(document.activeElement) ? (document.activeElement as HTMLElement) : null;
+  el.style.cssText = INLINE_CSS;
+  if (sortBtn.nextElementSibling !== el) sortBtn.after(el);
+  sortBtn.parentElement!.style.flexGrow = '1';
+  // Any overflow at all already slides "Select all"'s checkbox out of line
+  // with the row checkboxes below it (measured: 3px overflow = 11px shift).
+  if (header.scrollWidth > header.clientWidth) {
+    el.style.cssText = OWN_ROW_CSS;
+    // Same side padding as the header, so the last icon sits in the checkbox
+    // column of "Select all" and the source rows.
+    const hs = getComputedStyle(header);
+    el.style.paddingInline = `${hs.paddingInlineStart} ${hs.paddingInlineEnd}`;
+    header.after(el);
+  }
+  if (focused && document.activeElement !== focused) focused.focus();
+}
+
+export function ensureToolbar(sortBtn: HTMLElement, control: HTMLElement, order: number): void {
+  if (!toolbarEl || !toolbarEl.isConnected) {
+    toolbarEl = document.createElement('span');
+    toolbarEl.style.cssText = INLINE_CSS;
+    sortBtn.after(toolbarEl);
+  }
+  control.style.order = String(order);
+  const next = Array.from(toolbarEl.children).find((c) => Number((c as HTMLElement).style.order) > order);
+  toolbarEl.insertBefore(control, next ?? null);
+
+  const header = findHeader(sortBtn);
+  if (header && header !== observedHeader) {
+    headerObserver ??= new ResizeObserver(([entry]) => {
+      if (entry.contentRect.width === headerWidth) return; // our moves change only height
+      headerWidth = entry.contentRect.width;
+      placeToolbar();
+    });
+    headerObserver.disconnect();
+    observedHeader = header;
+    headerWidth = -1;
+    headerObserver.observe(header);
+  } else {
+    placeToolbar();
+  }
 }
 
 let deleteBtn: HTMLButtonElement | null = null;
@@ -150,7 +236,7 @@ function buildButton(sortBtn: HTMLElement): HTMLButtonElement {
   btn.removeAttribute('jslog');
   btn.classList.remove('mat-mdc-menu-trigger', 'source-sort-button');
   btn.type = 'button';
-  btn.style.cssText = 'margin-left:4px';
+  btn.style.cssText = '';
   btn.setAttribute('aria-label', 'Delete checked sources');
 
   const icon = btn.querySelector('mat-icon');
@@ -174,9 +260,13 @@ function ensureButton(): void {
   const sortBtn = findSortButton();
   if (!sortBtn) return;
 
+  // A re-rendered header leaves an own-row toolbar connected but orphaned;
+  // drop it so every control (both modules) is rebuilt around the new header.
+  if (observedHeader && !observedHeader.isConnected) toolbarEl?.remove();
+
   if (!deleteBtn || !deleteBtn.isConnected) {
     deleteBtn = buildButton(sortBtn);
-    sortBtn.insertAdjacentElement('afterend', deleteBtn);
+    ensureToolbar(sortBtn, deleteBtn, 3);
   }
 }
 

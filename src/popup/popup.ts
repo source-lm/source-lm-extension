@@ -18,6 +18,7 @@ import {
   trialRemaining,
   noteTrialUse,
 } from '../lib/license.js';
+import { loadReview, shouldAsk, snooze, stop as stopReviewAsk, storeUrl } from '../lib/review.js';
 // Job shape (incl. the optional captured-page `file`) is owned by the job
 // runner in notebook.ts — imported as a type only (erased at compile time,
 // no runtime dependency on that content-script module) so this file can't
@@ -493,6 +494,7 @@ chrome.runtime.onMessage.addListener((message: unknown) => {
     case 'UPLOAD_DONE': {
       uploadProgressWrap.hidden = true;
       setUploadBusy(false);
+      void refreshReviewBar();
       const uploaded = Number(msg.uploaded) || 0;
       const failed = Number(msg.failed) || 0;
       const unconfirmed = Number(msg.unconfirmed) || 0;
@@ -1130,6 +1132,34 @@ const planBarText = el<HTMLSpanElement>('plan-bar-text');
 const planBarPro = el<HTMLButtonElement>('plan-bar-pro');
 const planBarActivate = el<HTMLButtonElement>('plan-bar-activate');
 
+// ---- review ask (DECISIONS.md #19) -----------------------------------------
+
+const reviewBar = el<HTMLDivElement>('review-bar');
+const reviewBarRate = el<HTMLButtonElement>('review-bar-rate');
+const reviewBarLater = el<HTMLButtonElement>('review-bar-later');
+const reviewBarStop = el<HTMLButtonElement>('review-bar-stop');
+
+async function refreshReviewBar(): Promise<void> {
+  reviewBar.hidden = !shouldAsk(await loadReview());
+}
+
+reviewBarRate.addEventListener('click', async () => {
+  // Write first: the new active tab closes the popup and kills a pending write.
+  await stopReviewAsk().catch(() => {});
+  reviewBar.hidden = true;
+  void chrome.tabs.create({ url: storeUrl() });
+});
+
+reviewBarLater.addEventListener('click', async () => {
+  await snooze();
+  reviewBar.hidden = true;
+});
+
+reviewBarStop.addEventListener('click', async () => {
+  await stopReviewAsk();
+  reviewBar.hidden = true;
+});
+
 btnGetPro.textContent = `Get Pro — ${PRICE_LABEL} (lifetime)`;
 
 // Gate for the two metered actions (bulk JSON upload, multi-video YouTube
@@ -1237,3 +1267,4 @@ loadSettings().then((loaded) => {
 
 void initFromActiveTab();
 void refreshPlanBadge();
+void refreshReviewBar();

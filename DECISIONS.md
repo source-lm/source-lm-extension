@@ -504,6 +504,17 @@ the code looks the way it does, not at a style preference.
     request is the only reliable specification of this protocol, exactly the
     same rule as for the notebook RPC.
 
+19. **The review ask is one neutral prompt, not a gate.** `lib/review.ts`
+    counts successful uploads (`UPLOAD_DONE` with `uploaded > 0 && failed ===
+    0`, in both `uploader.ts` and `notebook.ts`) and shows a popup bar after
+    the 3rd — never at install, before the user has gotten any value. No
+    incentive (no trial/Pro extension for reviewing) and no review gating
+    ("happy? → store, not happy? → email") — the latter is exactly the
+    rating-manipulation pattern the CWS Developer Program Policy prohibits.
+    State lives in `storage.local` (per-device): a second machine re-asks
+    after its own 3 successful runs, which is acceptable for something this
+    low-stakes.
+
 ## NotebookLM limits (warning logic in Preview)
 
 - 50 sources/notebook on the free plan, 300 on Pro —

@@ -976,9 +976,13 @@ progress::-webkit-progress-value {
   flex: none;
 }
 
-/* Slim free-plan bar under the tab strip, shown on every tab while not Pro */
+/* Slim free-plan bar under the tab strip, shown on every tab while not Pro —
+   and the review-ask bar (#19), stacked under it once the review conditions are
+   met; same layout, so both share these rules (the ask text wraps instead of
+   truncating, see below). */
 
-#plan-bar {
+#plan-bar,
+#review-bar {
   flex: none;
   display: none;
   align-items: center;
@@ -990,11 +994,13 @@ progress::-webkit-progress-value {
   color: var(--muted);
 }
 
-#plan-bar:not([hidden]) {
+#plan-bar:not([hidden]),
+#review-bar:not([hidden]) {
   display: flex;
 }
 
-#plan-bar-text {
+#plan-bar-text,
+#review-bar-text {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -1002,8 +1008,17 @@ progress::-webkit-progress-value {
   white-space: nowrap;
 }
 
+#review-bar-text {
+  white-space: normal;
+  font-weight: 600;
+  color: var(--fg);
+}
+
 #plan-bar-pro,
-#plan-bar-activate {
+#plan-bar-activate,
+#review-bar-rate,
+#review-bar-later,
+#review-bar-stop {
   flex: none;
   height: auto;
   background: none;
@@ -1015,7 +1030,10 @@ progress::-webkit-progress-value {
 }
 
 #plan-bar-pro:hover,
-#plan-bar-activate:hover {
+#plan-bar-activate:hover,
+#review-bar-rate:hover,
+#review-bar-later:hover,
+#review-bar-stop:hover {
   background: none;
   color: var(--accent-hover);
 }

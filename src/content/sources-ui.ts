@@ -87,9 +87,34 @@ function ensureFilterInput(sortBtn: HTMLElement): void {
   filterInput = input;
 }
 
+// After NotebookLM's redesign the page's icon font only carries its own
+// glyphs (sort, delete, ...), so ligature text for our icons renders as
+// clipped letters. Draw them as inline SVGs instead (Material Symbols
+// Rounded, weight 300 to match NotebookLM's own glyphs; viewBox 0 -960 960 960).
+const ICON_PATHS = {
+  difference:
+    'M510-610v50q0 12.75 8.63 21.37 8.63 8.63 21.38 8.63 12.76 0 21.37-8.63Q570-547.25 570-560v-50h50q12.75 0 21.37-8.63 8.63-8.63 8.63-21.38 0-12.76-8.63-21.37Q632.75-670 620-670h-50v-50q0-12.75-8.63-21.37-8.63-8.63-21.38-8.63-12.76 0-21.37 8.63Q510-732.75 510-720v50h-50q-12.75 0-21.37 8.63-8.63 8.63-8.63 21.38 0 12.76 8.63 21.37Q447.25-610 460-610h50Zm-50 240h160q12.75 0 21.37-8.63 8.63-8.63 8.63-21.38 0-12.76-8.63-21.37Q632.75-430 620-430H460q-12.75 0-21.37 8.63-8.63 8.63-8.63 21.38 0 12.76 8.63 21.37Q447.25-370 460-370ZM332.31-220Q302-220 281-241q-21-21-21-51.31v-535.38Q260-858 281-879q21-21 51.31-21h247.77q14.63 0 27.89 5.62 13.26 5.61 23.11 15.46l167.84 167.84q9.85 9.85 15.46 23.11 5.62 13.26 5.62 27.89v367.77Q820-262 799-241q-21 21-51.31 21H332.31Zm0-60h415.38q4.62 0 8.46-3.85 3.85-3.84 3.85-8.46V-660L580-840H332.31q-4.62 0-8.46 3.85-3.85 3.84-3.85 8.46v535.38q0 4.62 3.85 8.46 3.84 3.85 8.46 3.85Zm-160 220Q142-60 121-81q-21-21-21-51.31V-630q0-12.75 8.63-21.37 8.63-8.63 21.38-8.63 12.76 0 21.37 8.63Q160-642.75 160-630v497.69q0 4.62 3.85 8.46 3.84 3.85 8.46 3.85H550q12.75 0 21.37 8.63 8.63 8.63 8.63 21.38 0 12.76-8.63 21.37Q562.75-60 550-60H172.31ZM320-280v-560V-280Z',
+  link_off:
+    'M616.92-456.31 563.23-510h36q12.77 0 21.38 8.62 8.62 8.61 8.62 21.38 0 7.69-3.23 13.77-3.23 6.08-9.08 9.92Zm210 365.39q-8.69 8.69-21.07 8.69-12.39 0-21.08-8.69L90.92-784.77q-8.3-8.31-8.5-20.88-.19-12.58 8.5-21.27 8.7-8.7 21.08-8.7 12.38 0 21.08 8.7l693.84 693.84q8.31 8.31 8.5 20.89.2 12.57-8.5 21.27ZM281.54-298.46q-75.31 0-128.42-53.12Q100-404.69 100-480q0-66.69 42.96-117.04 42.96-50.34 107.81-60.8H260l56.31 56.3h-34.77q-50.39 0-85.96 35.58Q160-530.38 160-480q0 50.38 35.58 85.96 35.57 35.58 85.96 35.58h121.54q12.77 0 21.38 8.61 8.62 8.62 8.62 21.39 0 12.77-8.62 21.38-8.61 8.62-21.38 8.62H281.54ZM360.77-450q-12.77 0-21.38-8.62-8.62-8.61-8.62-21.38t8.62-21.38Q348-510 360.77-510h47.69l59 60H360.77Zm372.69 114.31q-6.69-10.54-4.38-22.69 2.3-12.16 13.23-18.47 26.46-16.23 42.07-43.34Q800-447.31 800-480q0-50.38-35.38-85.96-35.39-35.58-85.39-35.58H556.92q-12.77 0-21.38-8.61-8.62-8.62-8.62-21.39 0-12.77 8.62-21.38 8.61-8.62 21.38-8.62h122.31q74.92 0 127.85 53.12Q860-555.31 860-480q0 47.46-23.08 87.65-23.08 40.2-62.31 65.12-10.53 6.69-22.5 4.38-11.96-2.3-18.65-12.84Z',
+} as const;
+
+function buildIconSvg(icon: keyof typeof ICON_PATHS): SVGSVGElement {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('width', '1em');
+  svg.setAttribute('height', '1em');
+  svg.setAttribute('viewBox', '0 -960 960 960');
+  svg.setAttribute('fill', 'currentColor');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.style.display = 'block';
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', ICON_PATHS[icon]);
+  svg.appendChild(path);
+  return svg;
+}
+
 function buildIconButton(
   sortBtn: HTMLElement,
-  icon: string,
+  icon: keyof typeof ICON_PATHS,
   label: string,
   onClick: () => void,
 ): HTMLButtonElement {
@@ -118,13 +143,12 @@ function buildIconButton(
 
   const iconEl = btn.querySelector('mat-icon');
   if (iconEl) {
-    iconEl.textContent = icon;
+    iconEl.replaceChildren(buildIconSvg(icon));
   } else {
     const fallbackIcon = document.createElement('mat-icon');
     fallbackIcon.className = 'mat-icon notranslate material-symbols-outlined google-symbols mat-icon-no-color';
     fallbackIcon.setAttribute('aria-hidden', 'true');
-    fallbackIcon.setAttribute('data-mat-icon-type', 'font');
-    fallbackIcon.textContent = icon;
+    fallbackIcon.appendChild(buildIconSvg(icon));
     btn.appendChild(fallbackIcon);
   }
 
@@ -299,7 +323,7 @@ function ensureUi(): void {
   ensureFilterInput(sortBtn);
 
   if (!brokenBtn || !brokenBtn.isConnected) {
-    brokenBtn = buildIconButton(sortBtn, 'healing', 'Broken sources', () => {
+    brokenBtn = buildIconButton(sortBtn, 'link_off', 'Broken sources', () => {
       void onShowBroken();
     });
     sortBtn.insertAdjacentElement('afterend', brokenBtn);

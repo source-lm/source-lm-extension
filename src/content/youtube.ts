@@ -112,11 +112,11 @@ export function visiblePageRoot(doc: Document = document): ParentNode {
 }
 
 // Page-wide scan of every /watch?v= anchor under `root`, minus the header
-// action-row false positives (ACTION_ROW_SEL) and ad cards (AD_SEL). This is the right tool for a
-// video grid/list (playlist panel, playlist page, channel grid) — a caller
-// that passes an explicit root already scoped to one of those. It is the
-// wrong tool for the watch page itself: see collectPageVideos below, which
-// is what the popup actually calls there.
+// action-row false positives (ACTION_ROW_SEL) and ad cards (AD_SEL). This
+// is the right tool for a video grid/list (playlist panel, playlist page,
+// channel grid) — a caller that passes an explicit root already scoped to
+// one of those. It is the wrong tool for the watch page itself: see
+// collectPageVideos below, which is what the popup actually calls there.
 export function collectVideos(root: ParentNode = visiblePageRoot()): VideoItem[] {
   const anchors = root.querySelectorAll('a[href*="/watch?v="]');
   const videos: VideoItem[] = [];

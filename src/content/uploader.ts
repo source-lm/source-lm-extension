@@ -578,8 +578,8 @@ if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
   installSourcesUi();
 
   // Cache the notebook list for the YouTube-side "Add to notebook" dialog
-  // (youtube-ui.ts): a content script on youtube.com can't reach this tab
-  // directly (no chrome.tabs, no service worker to relay through — DECISIONS.md
+  // (youtube-ui.ts): a content script on youtube.com can't ask this tab for
+  // the list (background.ts only relays OPEN_NOTEBOOK, not data — DECISIONS.md
   // #3), so this page refreshes the cache on every load instead. origin is
   // stored alongside because both notebooklm.google.com and notebook.google.com
   // are live (DECISIONS.md #6) and the YouTube side must reopen the right one.

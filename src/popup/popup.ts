@@ -775,7 +775,12 @@ async function submitJob(job: YoutubeJob, notebookSelect: HTMLSelectElement, sta
     existingTab?.url ? new URL(existingTab.url).origin : notebookCache?.origin ?? 'https://notebook.google.com';
   const createNew = notebookSelect.value === NEW_NOTEBOOK_VALUE;
   const url = createNew ? `${origin}/` : `${origin}/notebook/${job.targetNotebookId}`;
-  await chrome.runtime.sendMessage({ type: 'OPEN_NOTEBOOK', url });
+  const res = (await chrome.runtime.sendMessage({ type: 'OPEN_NOTEBOOK', url })) as { error?: string } | undefined;
+  // No callers catch: the popup is still open on failure, so say it here.
+  if (res?.error) {
+    statusEl.textContent = `Could not open the notebook tab: ${res.error}`;
+    return;
+  }
 
   statusEl.textContent = 'Job sent — progress will show in the notebook tab.';
 }
@@ -808,9 +813,9 @@ btnAddYoutube.addEventListener('click', async () => {
 
   const job: YoutubeJob = { type: 'ADD_YOUTUBE', videos, createdAt: Date.now(), ...target };
   // Commit before submitJob: it ends in focusing/opening a notebook tab,
-  // which closes the popup and kills everything after this line. The job is written to
-  // storage.local as submitJob's first act, so the only gap left is that one
-  // write failing — far better than never charging at all.
+  // which closes the popup and kills everything after this line. The job is
+  // written to storage.local as submitJob's first act, so the only gap left
+  // is that one write failing — far better than never charging at all.
   if (multi) await noteTrialUse();
   await submitJob(job, youtubeNotebookSelect, youtubeStatus);
 });
@@ -907,9 +912,9 @@ btnAddUrl.addEventListener('click', async () => {
     ...target,
   };
   // Commit before submitJob: it ends in focusing/opening a notebook tab,
-  // which closes the popup and kills everything after this line. The job is written to
-  // storage.local as submitJob's first act, so the only gap left is that one
-  // write failing — far better than never charging at all.
+  // which closes the popup and kills everything after this line. The job is
+  // written to storage.local as submitJob's first act, so the only gap left
+  // is that one write failing — far better than never charging at all.
   if (multi) await noteTrialUse();
   await submitJob(job, urlNotebookSelect, urlStatus);
 });

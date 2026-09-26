@@ -142,7 +142,7 @@ const { extractVideoId, dedupeVideos, findTitle, collectVideos, collectPageVideo
 const notebookResult = esbuild.buildSync({
   stdin: {
     contents: `
-      export { parseNotebookList, extractCreatedNotebookId, extractSourceUrls, extractSourceNames, youtubeVideoId, deleteSourceParams, handoffJob, sourceDataV1, parseSources, findDuplicateIds } from './notebook';
+      export { parseNotebookList, extractCreatedNotebookId, extractSourceUrls, extractSourceNames, youtubeVideoId, deleteSourceParams, handoffJob, sourceDataV1, parseSources, findDuplicateIds, runYoutubeJob } from './notebook';
     `,
     resolveDir: contentDir,
     loader: 'ts',
@@ -155,7 +155,7 @@ const notebookResult = esbuild.buildSync({
 
 const notebookCode = notebookResult.outputFiles[0].text;
 const notebook = await import('data:text/javascript;base64,' + Buffer.from(notebookCode).toString('base64'));
-const { parseNotebookList, extractCreatedNotebookId, extractSourceUrls, extractSourceNames, youtubeVideoId, deleteSourceParams, handoffJob, sourceDataV1, parseSources, findDuplicateIds } = notebook;
+const { parseNotebookList, extractCreatedNotebookId, extractSourceUrls, extractSourceNames, youtubeVideoId, deleteSourceParams, handoffJob, sourceDataV1, parseSources, findDuplicateIds, runYoutubeJob } = notebook;
 
 const youtubeUiResult = esbuild.buildSync({
   stdin: {
@@ -1196,6 +1196,21 @@ test('review: shouldAsk fires at the run threshold, snooze delays it by 10 more 
     assert.equal(shouldAsk(await loadReview()), false, 'stop must disable asking immediately');
     await noteSuccessfulRun();
     assert.equal(shouldAsk(await loadReview()), false, 'stop must disable asking for good, not just once');
+  } finally {
+    delete globalThis.chrome;
+  }
+});
+
+test('notebook: RUN_YOUTUBE_JOB arriving mid-job reruns once the current job ends, not dropped', async () => {
+  // Same stub-and-restore as the license test above. No job in storage, so
+  // each run is just one storage read — count the reads.
+  let reads = 0;
+  globalThis.chrome = { storage: { local: { get: async () => (reads++, {}) } } };
+  try {
+    const first = runYoutubeJob(() => {});
+    await runYoutubeJob(() => {}); // lands while the first is still reading
+    await first;
+    assert.equal(reads, 2, 'the second request must trigger a second read after the first run');
   } finally {
     delete globalThis.chrome;
   }

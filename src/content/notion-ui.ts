@@ -141,7 +141,7 @@ export async function openNotionDialog(pageId: string): Promise<void> {
 
   const host = document.createElement('div');
   host.style.cssText = 'position:fixed;inset:0;z-index:2147483647';
-  const shadow = host.attachShadow({ mode: 'open' });
+  const shadow = host.attachShadow({ mode: 'closed' });
 
   // Notion's theme is an in-app setting, and its `--theme--*` custom
   // properties read back empty on <body>, so neither a variable nor

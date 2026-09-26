@@ -419,6 +419,9 @@ async function readAndClearJob(): Promise<YoutubeJob | null> {
 }
 
 let jobRunning = false;
+// A RUN_YOUTUBE_JOB that lands mid-job means a newer job is waiting in
+// storage — run it once the current one is done instead of dropping it.
+let rerunRequested = false;
 
 // Runs both on content script load (the job was already in storage.local
 // — the notebook tab was just created for it) and on the explicit
@@ -428,7 +431,10 @@ export async function runYoutubeJob(
   send: (msg: JobProgressMessage) => void,
   uploadFile?: (notebookId: string, file: { filename: string; markdown: string }) => Promise<void>,
 ): Promise<void> {
-  if (jobRunning) return;
+  if (jobRunning) {
+    rerunRequested = true;
+    return;
+  }
   jobRunning = true;
 
   // Set only once a job is actually in hand: "no job to run" is the normal
@@ -610,5 +616,10 @@ export async function runYoutubeJob(
       });
     }
     jobRunning = false;
+    // A handed-off job reloads the page, whose auto-run picks up any newer
+    // job too. Awaited, so a failure reaches the caller's .catch as usual.
+    const rerun = rerunRequested && !handedOff;
+    rerunRequested = false;
+    if (rerun) await runYoutubeJob(send, uploadFile);
   }
 }

@@ -1,8 +1,8 @@
 // "Add to notebook" buttons injected into YouTube's own action rows (watch
 // page, watch-page playlist panel, playlist page) — see DECISIONS.md and the
 // plan this implements for the constraint that shapes the whole file: a
-// content script on youtube.com cannot reach the NotebookLM tab (no
-// chrome.tabs, no service worker to relay through, DECISIONS.md #3) and cannot
+// content script on youtube.com cannot ask the NotebookLM tab for data
+// (background.ts only relays OPEN_NOTEBOOK, DECISIONS.md #3) and cannot
 // call the batchexecute RPC itself (page CORS + cookies belong to the
 // notebook origin). So the notebook list is cached by the NotebookLM content
 // script (uploader.ts init block) into chrome.storage.local, and read here.
@@ -147,7 +147,7 @@ async function openDialog(subject: DialogSubject): Promise<void> {
 
   const host = document.createElement('div');
   host.style.cssText = 'position:fixed;inset:0;z-index:2147483647';
-  const shadow = host.attachShadow({ mode: 'open' });
+  const shadow = host.attachShadow({ mode: 'closed' });
 
   const style = document.createElement('style');
   style.textContent = `

@@ -203,7 +203,8 @@ the code looks the way it does, not at a style preference.
    from the README (injection into the MAIN world) will no longer
    require a new permission, only a different `executeScript` call.
 7. **Zero runtime dependencies**, dev-only deps are `esbuild`,
-   `typescript`, `@types/chrome`. React is deliberately not used — the
+   `typescript`, `@types/chrome`, `oxlint` + `oxlint-tsgolint` (the
+   only type-aware linter that runs on TS 7; typescript-eslint refuses it). React is deliberately not used — the
    popup is one form.
 8. `popup.html` loads `../../dist/popup.js` because `default_popup`
    points at `src/popup/popup.html`, while `dist/` sits at the root.

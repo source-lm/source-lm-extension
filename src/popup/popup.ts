@@ -1260,7 +1260,7 @@ void chrome.storage.local.get('youtubeJob').then(({ youtubeJob }) => {
   if (Date.now() - createdAt > 5 * 60 * 1000) void chrome.storage.local.remove('youtubeJob');
 });
 
-loadSettings().then((loaded) => {
+void loadSettings().then((loaded) => {
   settings = loaded;
   applySettingsToForm(settings);
 });

@@ -30,7 +30,7 @@ instead of a pull request — that is genuinely useful too.
 - Read `DECISIONS.md` first: architecture, the "decisions that must not be
   silently reverted" list, and the working style (minimal diff, no new
   dependencies, everything in English).
-- `npm install && npm test && npx tsc --noEmit && npm run build` must pass.
+- `npm install && npm test && npx tsc --noEmit && npm run lint && npm run build` must pass.
 - Non-trivial logic gets one test in `test/convert.test.mjs`.
 - Issues and pull requests are handled on a best-effort basis; there is
   no support SLA.

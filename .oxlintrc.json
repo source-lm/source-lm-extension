@@ -1,0 +1,7 @@
+{
+  "rules": {
+    // Records are untyped JSON: `String(unknown)` is deliberate, objects are
+    // either filtered out before it or only checked for emptiness.
+    "typescript/no-base-to-string": "off"
+  }
+}

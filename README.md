@@ -278,6 +278,7 @@ same stale token comes back. The only working retry is reloading the tab
 npm run watch      # esbuild, rebuild on change
 npm test           # node --test test/convert.test.mjs
 npx tsc --noEmit
+npm run lint       # oxlint --type-aware (tsgolint)
 ```
 
 Five entry points build into `dist/`: `popup.ts`, `uploader.ts` →

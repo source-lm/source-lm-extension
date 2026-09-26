@@ -40,7 +40,8 @@ the code looks the way it does, not at a style preference.
   rest of the current upload session.
 - `src/content/sources-ui.ts` — the three extras in the Sources panel
   header next to NotebookLM's sort button: a filter box (hides
-  non-matching rows, never unchecks them), «Select duplicate
+  non-matching rows, never unchecks them; the delete button skips
+  hidden rows), «Select duplicate
   sources» (`notebook.ts:listSources` + `findDuplicateIds`, ticks the
   repeats only), and «Broken sources» (lists the sources that failed to
   fetch and parks each one in the `fixQueue` hand-off for the popup —

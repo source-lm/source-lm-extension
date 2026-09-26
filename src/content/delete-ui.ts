@@ -43,6 +43,9 @@ function collectCheckedSources(): CheckedSource[] {
     for (let depth = 0; depth < 10 && el; depth += 1) {
       const buttons = el.querySelectorAll(`[id^="${MORE_BUTTON_ID_PREFIX}"]`);
       if (buttons.length === 1) {
+        // Rows hidden by the filter box (sources-ui.ts) stay checked for chat,
+        // but are never deleted: only what the user sees goes.
+        if (sourceRow(buttons[0] as HTMLElement).style.display === 'none') break;
         const id = buttons[0].id.slice(MORE_BUTTON_ID_PREFIX.length);
         if (id) sources.push({ id, title: input.getAttribute('aria-label') ?? id });
         break;

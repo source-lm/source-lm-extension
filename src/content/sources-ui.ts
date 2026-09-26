@@ -44,9 +44,9 @@ function moreButtons(): HTMLElement[] {
   return Array.from(document.querySelectorAll<HTMLElement>(`[id^="${MORE_BUTTON_ID_PREFIX}"]`));
 }
 
-// Hidden rows stay checked on purpose — the delete button's confirm() lists
-// every title it is about to delete, so a filtered-out row is still visible
-// to the user before anything happens.
+// Hidden rows stay checked on purpose — checked is NotebookLM's chat context,
+// which a filter must not change. The delete button skips hidden rows
+// (delete-ui.ts:collectCheckedSources), so only visible checked rows go.
 function applyFilter(): void {
   const query = filterInput?.value.trim().toLowerCase() ?? '';
   for (const btn of moreButtons()) {

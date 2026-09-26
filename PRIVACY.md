@@ -34,7 +34,8 @@ The short version, so a reader here is not left empty-handed:
   YouTube/link job and the broken-source hand-off (`fixQueue`) sit briefly in
   `chrome.storage.local` and are deleted on read or after 5 minutes; a cache of
   your notebooks' ids/titles (`notebookCache`) lives there too, for the popup,
-  the YouTube dialog, and the right-click submenu.
+  the YouTube dialog, and the right-click submenu; so does the `review`
+  counter (successful runs and when to ask for a store review — two numbers).
 - Permissions: `activeTab`, `storage`, `scripting`, `contextMenus`, and host
   access limited to `notebooklm.google.com`, `notebook.google.com`,
   `www.youtube.com`, and `api.polar.sh`. On `app.notion.com` and

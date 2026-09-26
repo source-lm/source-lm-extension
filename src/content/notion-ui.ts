@@ -141,7 +141,7 @@ export async function openNotionDialog(pageId: string): Promise<void> {
 
   const host = document.createElement('div');
   host.style.cssText = 'position:fixed;inset:0;z-index:2147483647';
-  const shadow = host.attachShadow({ mode: 'open' });
+  const shadow = host.attachShadow({ mode: 'closed' });
 
   // Notion's theme is an in-app setting, and its `--theme--*` custom
   // properties read back empty on <body>, so neither a variable nor
@@ -351,11 +351,15 @@ export async function openNotionDialog(pageId: string): Promise<void> {
         }
         // A ticked box that turns out to have no child pages is still one
         // source, so it stays free — the spend follows what was actually
-        // produced, not what was asked for. window.open does not kill a
-        // content-script context, so the honest check-then-commit order works
-        // here (DECISIONS.md #15).
+        // produced, not what was asked for. Opening the notebook tab does not
+        // kill a content-script context, so the honest check-then-commit order
+        // works here (DECISIONS.md #15).
         if (files.length > 1) await noteTrialUse();
-        window.open(notebookTabUrl(origin, createNew ? undefined : select.value), '_blank');
+        const res = (await chrome.runtime.sendMessage({
+          type: 'OPEN_NOTEBOOK',
+          url: notebookTabUrl(origin, createNew ? undefined : select.value),
+        })) as { error?: string } | undefined;
+        if (res?.error) throw new Error(res.error);
         closeDialog();
       } catch (err) {
         errorLine.textContent = err instanceof Error ? err.message : String(err);

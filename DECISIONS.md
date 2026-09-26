@@ -92,7 +92,11 @@ the code looks the way it does, not at a style preference.
   `notebookCache` that `uploader.ts` writes, rebuilt on
   `storage.onChanged`), and on a click writes the same `youtubeJob` to
   `chrome.storage.local` and opens the notebook tab — the content script
-  runs it. Imports `src/lib/capture.ts` and nothing else.
+  runs it. It also answers `OPEN_NOTEBOOK {url}` from the popup and the
+  in-page dialogs (`openNotebookTab`): a tab already showing that notebook
+  on either origin is focused and sent `RUN_YOUTUBE_JOB` (reloaded if it
+  has no live content script), otherwise a new tab opens.
+  Imports `src/lib/capture.ts` and nothing else.
 - `src/lib/capture.ts` — page text → Markdown source
   (`pageToMarkdown`, `captureFilename`), shared by «Add page as .md» in
   the popup and the context menu. Pure, DOM-free: the service worker
@@ -146,15 +150,18 @@ the code looks the way it does, not at a style preference.
    would not survive a pause between batches; the NotebookLM page lives
    for the whole session. `send()` in uploader swallows the absence of a
    listener (closed popup) via `.catch()`. Do not bring back an SW for
-   this. **The one narrow exception is `src/background.ts`**:
-   `chrome.contextMenus.onClicked` needs a listener alive with the popup
-   closed, and nothing else does. That worker is stateless — it registers
-   the menu and, on a click, writes the same `youtubeJob` to
-   `chrome.storage.local` and opens the notebook tab, exactly like the
-   popup and the in-page YouTube dialog; the content script's
-   `runYoutubeJob` still does all the work, so a worker killed mid-flight
-   loses nothing. Never put a queue, a retry loop or `alarms` in it. The
-   same argument is why the YouTube job is passed from the popup to the
+   this. **The one narrow exception is `src/background.ts`**, for the
+   two things only a worker can do: `chrome.contextMenus.onClicked`
+   needs a listener alive with the popup closed, and `OPEN_NOTEBOOK`
+   focuses the notebook's existing tab (or opens one) for every submit
+   path, which needs `chrome.tabs` — out of a content script's reach.
+   That worker is stateless — it registers the menu and, on a click,
+   writes the same `youtubeJob` to `chrome.storage.local` and opens the
+   notebook tab, exactly like the popup and the in-page YouTube dialog;
+   the job itself always travels through `storage.local` and the content
+   script's `runYoutubeJob` still does all the work, so a worker killed
+   mid-flight loses nothing. Never put a queue, a retry loop or `alarms`
+   in it. The same argument is why the YouTube job is passed from the popup to the
    notebook tab via storage (`notebook.ts:readAndClearJob`), not through
    an SW intermediary: the SW would have to stay alive between the click
    in the popup and the tab opening/becoming ready, while storage
@@ -341,12 +348,13 @@ the code looks the way it does, not at a style preference.
     shared quota; `noteTrialUse()` commits the spend, called only after the
     work is actually dispatched, so a failed handoff never burns a unit —
     except on the YouTube path, where dispatch (`submitJob`) itself ends
-    in `chrome.tabs.create`, which closes the popup and kills every
-    statement after it; there `noteTrialUse()` runs immediately after the
-    gate passes, right before `submitJob`, not after it. The in-page
-    dialog does not have this problem — `window.open` doesn't kill the
+    in opening/focusing the notebook tab via `OPEN_NOTEBOOK`, which
+    closes the popup and kills every statement after it; there
+    `noteTrialUse()` runs immediately after the gate passes, right before
+    `submitJob`, not after it. The in-page
+    dialog does not have this problem — opening the tab doesn't kill the
     content-script context — so there `noteTrialUse()` runs after the job
-    is written to `chrome.storage.local`, right before `window.open`, the
+    is written to `chrome.storage.local`, right before `OPEN_NOTEBOOK`, the
     same honest order as the JSON upload path.
     Still never sprinkled `if (isPro)` through the codebase. Free users
     get `FREE_QUOTA = 5` gated actions per calendar month, shared

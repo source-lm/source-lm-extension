@@ -1,8 +1,8 @@
 // "Add to notebook" buttons injected into YouTube's own action rows (watch
 // page, watch-page playlist panel, playlist page) — see DECISIONS.md and the
 // plan this implements for the constraint that shapes the whole file: a
-// content script on youtube.com cannot reach the NotebookLM tab (no
-// chrome.tabs, no service worker to relay through, DECISIONS.md #3) and cannot
+// content script on youtube.com cannot ask the NotebookLM tab for data
+// (background.ts only relays OPEN_NOTEBOOK, DECISIONS.md #3) and cannot
 // call the batchexecute RPC itself (page CORS + cookies belong to the
 // notebook origin). So the notebook list is cached by the NotebookLM content
 // script (uploader.ts init block) into chrome.storage.local, and read here.
@@ -147,7 +147,7 @@ async function openDialog(subject: DialogSubject): Promise<void> {
 
   const host = document.createElement('div');
   host.style.cssText = 'position:fixed;inset:0;z-index:2147483647';
-  const shadow = host.attachShadow({ mode: 'open' });
+  const shadow = host.attachShadow({ mode: 'closed' });
 
   const style = document.createElement('style');
   style.textContent = `
@@ -387,12 +387,16 @@ async function openDialog(subject: DialogSubject): Promise<void> {
             ...(createNew ? { createTitle } : { targetNotebookId: select.value }),
           },
         });
-        // Unlike the popup's YouTube path (chrome.tabs.create kills the popup
-        // context, DECISIONS.md #15), a content script survives window.open, so
+        // Unlike the popup's YouTube path (focusing the notebook tab kills the
+        // popup context, DECISIONS.md #15), a content script survives it, so
         // the honest check-then-commit order works here: spend only after
         // the job is actually written to storage.
         if (count > 1) await noteTrialUse();
-        window.open(notebookTabUrl(origin, createNew ? undefined : select.value), '_blank');
+        const res = (await chrome.runtime.sendMessage({
+          type: 'OPEN_NOTEBOOK',
+          url: notebookTabUrl(origin, createNew ? undefined : select.value),
+        })) as { error?: string } | undefined;
+        if (res?.error) throw new Error(res.error);
         closeDialog();
       } catch (err) {
         errorLine.textContent = err instanceof Error ? err.message : String(err);

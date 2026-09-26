@@ -29,7 +29,8 @@ type IncomingMessage =
   | { type: 'UPLOAD_CHUNK'; files: UploadFile[] }
   | { type: 'UPLOAD_CONTINUE' }
   | { type: 'GET_NOTEBOOKS' }
-  | { type: 'GET_SOURCE_NAMES' };
+  | { type: 'GET_SOURCE_NAMES' }
+  | { type: 'RUN_YOUTUBE_JOB' };
 
 type OutgoingMessage =
   | { type: 'UPLOAD_PROGRESS'; done: number; total: number; current?: string }
@@ -558,21 +559,27 @@ if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
           .then((names) => sendResponse({ names }))
           .catch((err) => sendResponse({ error: err instanceof Error ? err.message : String(err) }));
         return true;
+      } else if (message?.type === 'RUN_YOUTUBE_JOB') {
+        // background.ts focused this already-open tab for a new job instead
+        // of opening another one — the page-load run below came too early.
+        void runYoutubeJob(reportJob, uploadFileViaRpc).catch(reportJobFailure);
+        sendResponse({ ok: true });
       }
       return undefined;
     },
   );
 
-  // The notebook tab was just created specifically for this job —
-  // the job is already in storage.local by the time this script loads.
+  // The notebook tab was just created (or reloaded) for this job — the job is
+  // already in storage.local by the time this script loads. A tab that was
+  // already open is focused instead and gets RUN_YOUTUBE_JOB above.
   void runYoutubeJob(reportJob, uploadFileViaRpc).catch(reportJobFailure);
 
   installDeleteButton();
   installSourcesUi();
 
   // Cache the notebook list for the YouTube-side "Add to notebook" dialog
-  // (youtube-ui.ts): a content script on youtube.com can't reach this tab
-  // directly (no chrome.tabs, no service worker to relay through — DECISIONS.md
+  // (youtube-ui.ts): a content script on youtube.com can't ask this tab for
+  // the list (background.ts only relays OPEN_NOTEBOOK, not data — DECISIONS.md
   // #3), so this page refreshes the cache on every load instead. origin is
   // stored alongside because both notebooklm.google.com and notebook.google.com
   // are live (DECISIONS.md #6) and the YouTube side must reopen the right one.

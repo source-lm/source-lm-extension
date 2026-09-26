@@ -760,8 +760,8 @@ function resolveNotebookTarget(
 }
 
 // Shared tail of every job submission (YouTube videos, a plain link, or a
-// captured page): stash the job, open a fresh notebook tab at the right
-// place, done — the tab's own content script runs it (runYoutubeJob in
+// captured page): stash the job, have background.ts focus the notebook's tab
+// or open one, done — the tab's own content script runs it (runYoutubeJob in
 // src/content/notebook.ts). storage.local, not storage.session: see the
 // comment above this section.
 async function submitJob(job: YoutubeJob, notebookSelect: HTMLSelectElement, statusEl: HTMLDivElement): Promise<void> {
@@ -775,7 +775,12 @@ async function submitJob(job: YoutubeJob, notebookSelect: HTMLSelectElement, sta
     existingTab?.url ? new URL(existingTab.url).origin : notebookCache?.origin ?? 'https://notebook.google.com';
   const createNew = notebookSelect.value === NEW_NOTEBOOK_VALUE;
   const url = createNew ? `${origin}/` : `${origin}/notebook/${job.targetNotebookId}`;
-  await chrome.tabs.create({ url });
+  const res = (await chrome.runtime.sendMessage({ type: 'OPEN_NOTEBOOK', url })) as { error?: string } | undefined;
+  // No callers catch: the popup is still open on failure, so say it here.
+  if (res?.error) {
+    statusEl.textContent = `Could not open the notebook tab: ${res.error}`;
+    return;
+  }
 
   statusEl.textContent = 'Job sent — progress will show in the notebook tab.';
 }
@@ -807,10 +812,10 @@ btnAddYoutube.addEventListener('click', async () => {
   }
 
   const job: YoutubeJob = { type: 'ADD_YOUTUBE', videos, createdAt: Date.now(), ...target };
-  // Commit before submitJob: it ends in chrome.tabs.create, which closes the
-  // popup and kills everything after this line. The job is written to
-  // storage.local as submitJob's first act, so the only gap left is that one
-  // write failing — far better than never charging at all.
+  // Commit before submitJob: it ends in focusing/opening a notebook tab,
+  // which closes the popup and kills everything after this line. The job is
+  // written to storage.local as submitJob's first act, so the only gap left
+  // is that one write failing — far better than never charging at all.
   if (multi) await noteTrialUse();
   await submitJob(job, youtubeNotebookSelect, youtubeStatus);
 });
@@ -906,10 +911,10 @@ btnAddUrl.addEventListener('click', async () => {
     createdAt: Date.now(),
     ...target,
   };
-  // Commit before submitJob: it ends in chrome.tabs.create, which closes the
-  // popup and kills everything after this line. The job is written to
-  // storage.local as submitJob's first act, so the only gap left is that one
-  // write failing — far better than never charging at all.
+  // Commit before submitJob: it ends in focusing/opening a notebook tab,
+  // which closes the popup and kills everything after this line. The job is
+  // written to storage.local as submitJob's first act, so the only gap left
+  // is that one write failing — far better than never charging at all.
   if (multi) await noteTrialUse();
   await submitJob(job, urlNotebookSelect, urlStatus);
 });
@@ -1060,8 +1065,8 @@ btnAddPage.addEventListener('click', async () => {
     ...target,
   };
   // Cleared before submitJob for the same reason the trial counter is:
-  // submitJob ends in chrome.tabs.create, which closes the popup and kills
-  // every statement after it.
+  // submitJob ends in focusing/opening a notebook tab, which closes the
+  // popup and kills every statement after it.
   if (replaceSourceId) await dropPendingFix(replaceSourceId);
   await submitJob(job, urlNotebookSelect, urlStatus);
 });
@@ -1252,7 +1257,7 @@ btnDeactivateLicense.addEventListener('click', async () => {
 // notebook's own source names; the old key may remain from a previous version.
 void chrome.storage.local.remove('uploadWatermark');
 
-// A job the notebook tab never picked up (tab closed early, tabs.create
+// A job the notebook tab never picked up (tab closed early, opening it
 // failed) would otherwise keep captured page text in storage.local until
 // overwritten. Same 5-minute TTL as notebook.ts:readAndClearJob.
 void chrome.storage.local.get('youtubeJob').then(({ youtubeJob }) => {

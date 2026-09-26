@@ -142,7 +142,7 @@ const { extractVideoId, dedupeVideos, findTitle, collectVideos, collectPageVideo
 const notebookResult = esbuild.buildSync({
   stdin: {
     contents: `
-      export { parseNotebookList, extractCreatedNotebookId, extractSourceUrls, extractSourceNames, youtubeVideoId, deleteSourceParams, handoffJob, sourceDataV1, parseSources, findDuplicateIds } from './notebook';
+      export { parseNotebookList, extractCreatedNotebookId, extractSourceUrls, extractSourceNames, youtubeVideoId, deleteSourceParams, handoffJob, sourceDataV1, parseSources, findDuplicateIds, runYoutubeJob } from './notebook';
     `,
     resolveDir: contentDir,
     loader: 'ts',
@@ -155,7 +155,7 @@ const notebookResult = esbuild.buildSync({
 
 const notebookCode = notebookResult.outputFiles[0].text;
 const notebook = await import('data:text/javascript;base64,' + Buffer.from(notebookCode).toString('base64'));
-const { parseNotebookList, extractCreatedNotebookId, extractSourceUrls, extractSourceNames, youtubeVideoId, deleteSourceParams, handoffJob, sourceDataV1, parseSources, findDuplicateIds } = notebook;
+const { parseNotebookList, extractCreatedNotebookId, extractSourceUrls, extractSourceNames, youtubeVideoId, deleteSourceParams, handoffJob, sourceDataV1, parseSources, findDuplicateIds, runYoutubeJob } = notebook;
 
 const youtubeUiResult = esbuild.buildSync({
   stdin: {
@@ -650,6 +650,29 @@ test('youtube: collectVideos skips playlist header action buttons ("Play all") t
   const videos = collectVideos(root);
   assert.equal(videos.length, 1);
   assert.equal(videos[0].title, 'Real Video Title');
+});
+
+test('youtube: collectVideos skips ad cards whose CTA anchor ("Watch") would become the title', () => {
+  // A promoted video links to a plain /watch?v= URL: title-less thumbnail
+  // first, then the CTA button, whose aria-label the dedupe backfills.
+  const inAd = (sel) => (sel.includes('ytd-ad-slot-renderer') ? {} : null);
+  const adThumb = {
+    getAttribute: (name) => (name === 'href' ? '/watch?v=ad1&pp=x' : null),
+    matches: () => false,
+    querySelector: () => null,
+    closest: inAd,
+  };
+  const adCta = { ...adThumb, getAttribute: (name) => (name === 'href' ? '/watch?v=ad1&pp=x' : name === 'aria-label' ? 'Watch' : null) };
+  const realAnchor = {
+    getAttribute: (name) => (name === 'href' ? '/watch?v=real1' : null),
+    matches: () => false,
+    querySelector: () => null,
+    closest: (sel) => (sel === 'h3, h4' ? { getAttribute: () => null } : null),
+    textContent: 'Real Video Title',
+  };
+  const root = { querySelectorAll: () => [adThumb, adCta, realAnchor] };
+
+  assert.deepEqual(collectVideos(root).map((v) => v.videoId), ['real1']);
 });
 
 test('youtube: collectVideos skips the playlist header hero thumbnail link (yt-page-header-view-model), titled with the playlist name', () => {
@@ -1173,6 +1196,21 @@ test('review: shouldAsk fires at the run threshold, snooze delays it by 10 more 
     assert.equal(shouldAsk(await loadReview()), false, 'stop must disable asking immediately');
     await noteSuccessfulRun();
     assert.equal(shouldAsk(await loadReview()), false, 'stop must disable asking for good, not just once');
+  } finally {
+    delete globalThis.chrome;
+  }
+});
+
+test('notebook: RUN_YOUTUBE_JOB arriving mid-job reruns once the current job ends, not dropped', async () => {
+  // Same stub-and-restore as the license test above. No job in storage, so
+  // each run is just one storage read — count the reads.
+  let reads = 0;
+  globalThis.chrome = { storage: { local: { get: async () => (reads++, {}) } } };
+  try {
+    const first = runYoutubeJob(() => {});
+    await runYoutubeJob(() => {}); // lands while the first is still reading
+    await first;
+    assert.equal(reads, 2, 'the second request must trigger a second read after the first run');
   } finally {
     delete globalThis.chrome;
   }

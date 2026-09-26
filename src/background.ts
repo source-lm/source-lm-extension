@@ -4,9 +4,11 @@
 // needs one. So this worker holds no queue and no state — it registers the
 // menu, and on a click it writes the very same `youtubeJob` to
 // chrome.storage.local that the popup and the YouTube dialog write, then
-// opens the notebook tab. The content script there (notebook.ts:
-// runYoutubeJob) does all the actual work. An MV3 worker killed mid-flight
-// therefore loses nothing: the job is already in storage.
+// opens the notebook tab. It also answers OPEN_NOTEBOOK, so every submit path
+// (popup, in-page dialogs, the menu) reuses a tab already showing that
+// notebook instead of stacking a duplicate. The content script there
+// (notebook.ts: runYoutubeJob) does all the actual work. An MV3 worker killed
+// mid-flight therefore loses nothing: the job is already in storage.
 //
 // Never put a queue, a retry loop or `alarms` in here.
 
@@ -18,6 +20,8 @@ import type { YoutubeJob } from './content/notebook';
 const ROOT_ID = 'sel';
 const NEW_NOTEBOOK_ID = 'sel:new';
 const DEFAULT_ORIGIN = 'https://notebook.google.com';
+// Both stay alive at once (DECISIONS.md #6).
+const NOTEBOOK_ORIGINS = ['https://notebooklm.google.com', 'https://notebook.google.com'];
 
 type NotebookCache = {
   notebooks?: { id: string; title: string; emoji?: string }[];
@@ -66,12 +70,41 @@ function buildMenus(): void {
   building = building.then(rebuildMenus).catch(() => {});
 }
 
-// All four listeners are registered at the top level: a worker woken up by
+// Focuses a tab already showing this notebook, on either origin; a new
+// notebook, or one not open anywhere, gets a fresh tab.
+async function openNotebookTab(url: string): Promise<void> {
+  const { origin, pathname } = new URL(url);
+  // Trust boundary: never open an arbitrary URL on a message's say-so.
+  if (!NOTEBOOK_ORIGINS.includes(origin)) throw new Error(`Not a notebook URL: ${url}`);
+  const id = /^\/notebook\/([^/]+)/.exec(pathname)?.[1];
+  const [tab] = id ? await chrome.tabs.query({ url: NOTEBOOK_ORIGINS.map((o) => `${o}/notebook/${id}*`) }) : [];
+  if (!tab?.id) {
+    await chrome.tabs.create({ url });
+    return;
+  }
+  const tabId = tab.id;
+  await chrome.tabs.update(tabId, { active: true });
+  await chrome.windows.update(tab.windowId, { focused: true });
+  // The tab's page-load auto-run fired before this job existed, so poke it.
+  // Not a reload: that would kill an upload queue or a job already running
+  // there (DECISIONS.md #3). No receiver means the tab predates an extension
+  // reload — then a reload is the only way to get a live content script.
+  await chrome.tabs.sendMessage(tabId, { type: 'RUN_YOUTUBE_JOB' }).catch(() => chrome.tabs.reload(tabId));
+}
+
+// All five listeners are registered at the top level: a worker woken up by
 // an event must have its handlers attached before the event is dispatched.
 chrome.runtime.onInstalled.addListener(buildMenus);
 chrome.runtime.onStartup.addListener(buildMenus);
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName === 'local' && 'notebookCache' in changes) buildMenus();
+});
+chrome.runtime.onMessage.addListener((message: { type?: string; url?: string }, sender, sendResponse) => {
+  if (sender.id !== chrome.runtime.id || message?.type !== 'OPEN_NOTEBOOK') return undefined;
+  openNotebookTab(String(message.url))
+    .then(() => sendResponse({}))
+    .catch((err) => sendResponse({ error: err instanceof Error ? err.message : String(err) }));
+  return true;
 });
 
 // The click grants activeTab for this tab, so executeScript works with no
@@ -122,9 +155,9 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
       ...(targetId ? { targetNotebookId: targetId } : { createTitle: '' }),
     };
     await chrome.storage.local.set({ youtubeJob });
-    await chrome.tabs.create({
-      url: targetId ? `${origin.replace(/\/+$/, '')}/notebook/${targetId}` : `${origin.replace(/\/+$/, '')}/`,
-    });
+    await openNotebookTab(
+      targetId ? `${origin.replace(/\/+$/, '')}/notebook/${targetId}` : `${origin.replace(/\/+$/, '')}/`,
+    );
     // One source per click — always free, no licence gate (DECISIONS.md #15).
   })();
 });

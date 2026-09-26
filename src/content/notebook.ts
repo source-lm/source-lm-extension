@@ -421,9 +421,9 @@ async function readAndClearJob(): Promise<YoutubeJob | null> {
 let jobRunning = false;
 
 // Runs both on content script load (the job was already in storage.local
-// — the notebook tab was just created by the popup) and on the explicit
-// RUN_YOUTUBE_JOB message (the tab was opened earlier, and its page-load
-// auto-run didn't catch the job in time).
+// — the notebook tab was just created for it) and on the explicit
+// RUN_YOUTUBE_JOB message from background.ts (the tab was already open and
+// got focused instead, so its page-load auto-run came before the job).
 export async function runYoutubeJob(
   send: (msg: JobProgressMessage) => void,
   uploadFile?: (notebookId: string, file: { filename: string; markdown: string }) => Promise<void>,

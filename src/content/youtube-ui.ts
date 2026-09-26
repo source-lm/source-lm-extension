@@ -387,12 +387,16 @@ async function openDialog(subject: DialogSubject): Promise<void> {
             ...(createNew ? { createTitle } : { targetNotebookId: select.value }),
           },
         });
-        // Unlike the popup's YouTube path (chrome.tabs.create kills the popup
-        // context, DECISIONS.md #15), a content script survives window.open, so
+        // Unlike the popup's YouTube path (focusing the notebook tab kills the
+        // popup context, DECISIONS.md #15), a content script survives it, so
         // the honest check-then-commit order works here: spend only after
         // the job is actually written to storage.
         if (count > 1) await noteTrialUse();
-        window.open(notebookTabUrl(origin, createNew ? undefined : select.value), '_blank');
+        const res = (await chrome.runtime.sendMessage({
+          type: 'OPEN_NOTEBOOK',
+          url: notebookTabUrl(origin, createNew ? undefined : select.value),
+        })) as { error?: string } | undefined;
+        if (res?.error) throw new Error(res.error);
         closeDialog();
       } catch (err) {
         errorLine.textContent = err instanceof Error ? err.message : String(err);

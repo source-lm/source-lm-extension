@@ -29,7 +29,8 @@ type IncomingMessage =
   | { type: 'UPLOAD_CHUNK'; files: UploadFile[] }
   | { type: 'UPLOAD_CONTINUE' }
   | { type: 'GET_NOTEBOOKS' }
-  | { type: 'GET_SOURCE_NAMES' };
+  | { type: 'GET_SOURCE_NAMES' }
+  | { type: 'RUN_YOUTUBE_JOB' };
 
 type OutgoingMessage =
   | { type: 'UPLOAD_PROGRESS'; done: number; total: number; current?: string }
@@ -558,13 +559,19 @@ if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
           .then((names) => sendResponse({ names }))
           .catch((err) => sendResponse({ error: err instanceof Error ? err.message : String(err) }));
         return true;
+      } else if (message?.type === 'RUN_YOUTUBE_JOB') {
+        // background.ts focused this already-open tab for a new job instead
+        // of opening another one — the page-load run below came too early.
+        void runYoutubeJob(reportJob, uploadFileViaRpc).catch(reportJobFailure);
+        sendResponse({ ok: true });
       }
       return undefined;
     },
   );
 
-  // The notebook tab was just created specifically for this job —
-  // the job is already in storage.local by the time this script loads.
+  // The notebook tab was just created (or reloaded) for this job — the job is
+  // already in storage.local by the time this script loads. A tab that was
+  // already open is focused instead and gets RUN_YOUTUBE_JOB above.
   void runYoutubeJob(reportJob, uploadFileViaRpc).catch(reportJobFailure);
 
   installDeleteButton();

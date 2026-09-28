@@ -80,13 +80,13 @@ the code looks the way it does, not at a style preference.
 - `src/lib/notion-export.ts` — the pure half: page id out of a URL, the
   `enqueueTask` request body, a dependency-free zip reader (stored and
   `deflate-raw`), and the depth filter that turns zip paths into sources.
-  Tested in `test/convert.test.mjs`.
+  Tested in `test/notion-export.test.mjs`.
 - `src/lib/notion-blocks.ts` — the other pure half, for the public path:
   Notion's block JSON → Markdown (`pageToMarkdown`, plus `blockValue`,
   `richText`, `mergeRecordMaps`, `missingBlockIds`, `entriesSection`). No
   fetch, no DOM, no chrome, so the whole conversion is testable under plain
-  node — `test/convert.test.mjs` walks one record map with every block type
-  through it.
+  node — `test/notion-blocks.test.mjs` walks one record map with every
+  block type through it.
 - `src/background.ts` — the only service worker, and deliberately the
   smallest possible one (decision #3): registers the «Add selection to
   Notebook» context menu with a submenu of notebooks (read from the
@@ -143,7 +143,7 @@ the code looks the way it does, not at a style preference.
    placeholders still cover the maximum.
 2. **A record is never split across files**: a record longer than
    `max_words_per_file` gets its own file whole, plus a warning
-   (`chunker.ts`, test in `test/convert.test.mjs` — "oversized record
+   (`chunker.ts`, test in `test/chunker.test.mjs` — "oversized record
    gets its own file, whole, not truncated").
 3. **The upload queue lives in the content script (`uploader.ts`), not
    in a service worker.** The service worker is intentionally absent
@@ -542,9 +542,9 @@ the code looks the way it does, not at a style preference.
 
 Minimal diff, standard library and platform before dependencies, no
 abstractions "for the future". Non-trivial logic gets one test in
-`test/convert.test.mjs` (same file also has the trick: `esbuild.
-buildSync` inlines `src/lib/*` into a single module and imports it as a
-`data:` URI, so TS runs directly through `node --test` without a
+the matching `test/<domain>.test.mjs` (`test/helpers.mjs` has the trick:
+`esbuild.buildSync` bundles one `src/` module in memory and imports it as
+a `data:` URI, so TS runs directly through `node --test` without a
 separate compile step).
 
 **Everything in this repository is English, including this file.**
@@ -557,7 +557,9 @@ literals matching the Russian locale of NotebookLM's own UI
 (`ADD_SOURCE_RE`, `DROP_ZONE_RE` in `uploader.ts`) and of YouTube's
 (`SHUFFLE_RE`, `PLAY_ALL_RE`, `SUBSCRIBE_RE`, `VIDEOS_TAB_RE` in
 `youtube-ui.ts`, `SORT_BUTTON_RE` in `delete-ui.ts`), plus the
-corresponding test fixtures in `test/convert.test.mjs` — those Russian
-variants are selectors, not prose, and must never be translated or
-removed.
+corresponding test fixtures in `test/uploader.test.mjs` and
+`test/youtube-ui.test.mjs` — those Russian variants are selectors, not
+prose, and must never be translated or removed. The Cyrillic `slugify`
+case in `test/chunker.test.mjs` is kept for the same reason: it is the
+only Unicode coverage of the slug path.
 

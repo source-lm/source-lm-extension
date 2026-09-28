@@ -5,7 +5,7 @@
 // host's own module into the other host's bundle.
 //
 // This module must not touch the DOM or chrome APIs at import time (it is
-// bundled and imported by test/convert.test.mjs under Node) — all of that is
+// bundled and imported by the tests in test/ under Node) — all of that is
 // deferred to the functions themselves.
 
 type NotebookSummary = { id: string; title: string; emoji?: string };

@@ -1,0 +1,12 @@
+[
+  [
+    "Notebook title",
+    [
+      [["w-1"],"Example",[null,1200,["ts"],["uuid",["ts"]],5,null,1,["https://example.org/"],3300],[null,2]],
+      [["y-1"],"Sample Channel video",[null,3770,["ts"],["uuid",["ts"]],9,["https://youtu.be/vid00000002","vid00000002","SC"],1],[null,3]],
+      [["m-1"],"export-1.md",[null,10,["ts"],["uuid"],null],[null,null]],
+      "not a source",
+      [[],"no id"]
+    ]
+  ]
+]

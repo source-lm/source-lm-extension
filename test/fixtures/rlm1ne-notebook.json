@@ -1,0 +1,10 @@
+[
+  [
+    "Notebook title",
+    [
+      [["src-1"],"Sample Channel video",[null,3770,["ts"],["uuid",["ts"]],9,["https://www.youtube.com/watch?v=vid00000002","vid00000002","Sample Channel"],1,null,4261,null,null,null,null,null,["ts"]],[null,2]],
+      [["src-2"],"Some Article",[null,null,null,null,4,null,null,["https://example.com/article"]]],
+      [["src-3"],"No URL source",[null,null,null,null,1]]
+    ]
+  ]
+]

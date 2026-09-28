@@ -276,7 +276,7 @@ same stale token comes back. The only working retry is reloading the tab
 
 ```bash
 npm run watch      # esbuild, rebuild on change
-npm test           # node --test test/convert.test.mjs
+npm test           # node --test test/*.test.mjs
 npx tsc --noEmit
 npm run lint       # oxlint --type-aware (tsgolint)
 ```

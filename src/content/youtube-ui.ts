@@ -13,7 +13,7 @@
 // single markup change doesn't take the button out entirely.
 //
 // This module must not touch the DOM or chrome APIs at import time (it is
-// bundled and imported by test/convert.test.mjs under Node) — all of that is
+// bundled and imported by the tests in test/ under Node) — all of that is
 // deferred to installYoutubeButtons() and the functions it calls.
 
 import { collectVideos, dedupeVideos, visiblePageRoot, type VideoItem } from './youtube';
@@ -28,7 +28,7 @@ import {
   queryRendered,
   readNotebookCache,
 } from './page-ui';
-// Re-exported for the test bundle (test/convert.test.mjs imports them from here).
+// Re-exported for the test bundle (test/youtube-ui.test.mjs imports them from here).
 export { firstRendered, notebookTabUrl } from './page-ui';
 
 // ---- pure helpers (exported for the test, no DOM/chrome) -----------------

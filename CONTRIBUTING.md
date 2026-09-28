@@ -31,6 +31,6 @@ instead of a pull request — that is genuinely useful too.
   silently reverted" list, and the working style (minimal diff, no new
   dependencies, everything in English).
 - `npm install && npm test && npx tsc --noEmit && npm run lint && npm run build` must pass.
-- Non-trivial logic gets one test in `test/convert.test.mjs`.
+- Non-trivial logic gets one test in the matching `test/<domain>.test.mjs`.
 - Issues and pull requests are handled on a best-effort basis; there is
   no support SLA.

@@ -20,7 +20,7 @@
 // sites live on *.notion.site and have their own, shorter ladder.
 //
 // This module must not touch the DOM or chrome APIs at import time (content
-// modules are bundled and imported by test/convert.test.mjs under Node) — all
+// modules are bundled and imported by the tests in test/ under Node) — all
 // of that is deferred to installNotionButton() and the functions it calls.
 
 import {

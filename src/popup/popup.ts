@@ -184,6 +184,20 @@ const dropzoneLabel = document.querySelector<HTMLLabelElement>('.dropzone');
 const fileNameLabel = el<HTMLSpanElement>('file-name');
 const fileMetaLabel = el<HTMLSpanElement>('file-meta');
 
+// Chrome 152+ on macOS destroys the action popup when it loses focus to the
+// native file dialog, so `change` never fires (DECISIONS.md #20). Drag & drop
+// still works there, so the dropzone becomes drag-only.
+// ponytail: open-ended range, cap it at the fixed Chrome version once Chromium ships a fix.
+function filePickerClosesPopup(ua: string): boolean {
+  return /Macintosh/.test(ua) && Number(/Chrome\/(\d+)/.exec(ua)?.[1] ?? 0) >= 152;
+}
+const dragOnly = filePickerClosesPopup(navigator.userAgent);
+const idleFileText = dragOnly
+  ? 'Drag & drop a .json file or Telegram .html export here'
+  : 'Choose a .json file or Telegram .html export';
+fileNameLabel.textContent = idleFileText;
+if (dragOnly) dropzoneLabel?.addEventListener('click', (e) => e.preventDefault());
+
 jsonFile.addEventListener('change', () => {
   const files = [...(jsonFile.files ?? [])];
   if (files.length === 1) {
@@ -195,7 +209,7 @@ jsonFile.addEventListener('change', () => {
     fileMetaLabel.textContent = formatSize(files.reduce((a, f) => a + f.size, 0));
     dropzoneLabel?.classList.add('has-file');
   } else {
-    fileNameLabel.textContent = 'Choose a .json file or Telegram .html export';
+    fileNameLabel.textContent = idleFileText;
     fileMetaLabel.textContent = '';
     dropzoneLabel?.classList.remove('has-file');
   }

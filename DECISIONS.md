@@ -529,6 +529,22 @@ the code looks the way it does, not at a style preference.
     after its own 3 successful runs, which is acceptable for something this
     low-stakes.
 
+20. **The popup's file picker is disabled on macOS Chrome 152+; the
+    dropzone is drag-only there.** Since Chrome 152 (works in 151) macOS
+    destroys the action popup when it loses focus to the native file
+    dialog, so the `<input type="file">` `change` never fires. With popup
+    DevTools open it works, because DevTools turns off close-on-blur —
+    do not "verify a fix" that way. `filePickerClosesPopup()` in
+    `popup.ts` matches `Macintosh` + `Chrome/N >= 152` (Edge shares the
+    engine), swaps the dropzone text to "Drag & drop … here" and makes a click
+    a no-op instead of opening the dialog; drag & drop is unchanged.
+    Tried and failed: `showOpenFilePicker` (same blur close), stashing
+    picked files in IndexedDB (the popup is gone before any handler
+    runs). Rejected: opening the picker in a detached window (UX cost for
+    every upload). Deferred: moving the UI to the side panel. Do not
+    re-enable the picker until a Chromium fix is verified without
+    DevTools open; then cap the version range in the helper.
+
 ## NotebookLM limits (warning logic in Preview)
 
 - 50 sources/notebook on the free plan, 300 on Pro —

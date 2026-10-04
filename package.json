@@ -13,7 +13,7 @@
     "package": "npm run build && VERSION=$(node -p \"require('./manifest.json').version\") && rm -f \"source-lm-v$VERSION.zip\" && zip -r \"source-lm-v$VERSION.zip\" manifest.json _locales icons dist src/popup/popup.html src/popup/popup.css"
   },
   "devDependencies": {
-    "@types/chrome": "^0.3.0",
+    "@types/chrome": "^0.3.4",
     "esbuild": "^0.28.2",
     "oxlint": "^1.85.0",
     "oxlint-tsgolint": "^7.0.2003",

@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <img src="./docs/popup-youtube.png" alt="Source LM popup collecting YouTube videos" width="420">
+  <img src="./docs/popup-youtube.png" alt="Source LM side panel collecting YouTube videos" width="420">
   <img src="./docs/youtube-dialog-comments.png" alt="In-page Add to notebook dialog on YouTube" width="420">
 </p>
 
@@ -33,7 +33,7 @@ through the notebook page's own upload endpoint.
 |---|---|
 | **JSON dataset** | Pick a `.json`, Preview shows the packing, Upload sends it. Records are never split across files; re-running adds only what's new. |
 | **Notion page** | "Add to NotebookLM" in Notion's own top bar. One click adds the page; tick "Include child pages (1 level)" and its direct children come too, one source each. Own workspace: Notion's own Markdown export. Public `*.notion.site`: read the way the site itself draws the page. |
-| **YouTube video, playlist, channel** | "Add to notebook" buttons inside YouTube's own UI, or pick videos from the popup. |
+| **YouTube video, playlist, channel** | "Add to notebook" buttons inside YouTube's own UI, or pick videos from the side panel. |
 | **YouTube comments** | Top comment threads with replies, as a separate Markdown source. |
 | **Any web page** | Paste one link or a whole list. Pages NotebookLM can't fetch (login-walled, JS-rendered) are captured as Markdown from the tab you have open; on ChatGPT, Claude, Gemini and Perplexity conversation pages the capture is a transcript with each turn labelled. |
 | **Selected text** | Select, right-click, "Add selection to Notebook", pick a notebook. |
@@ -61,11 +61,11 @@ this folder.
 
 1. Open a notebook at [notebooklm.google.com](https://notebooklm.google.com/)
    and keep the tab open — the upload runs in that tab.
-2. Open the extension popup.
+2. Click the extension icon — Source LM opens in the side panel.
 3. Pick a `.json` file → **Preview** → check file count, sizes, names and
    warnings → **Upload to Notebook**.
 
-Progress, errors and confirmations show up in the popup while it runs.
+Progress, errors and confirmations show up in the side panel while it runs.
 
 ### YouTube
 
@@ -86,14 +86,15 @@ script runs it with progress in an on-page toast.
 - **Also add comments as a text source** collects the top comment threads
   with their replies as a second source, `[youtube]-comments-<title>.md`.
   Two sources in one click, so it counts as a bulk action; the video alone
-  is free. Comments can also go in alone (popup → YouTube tab → **Add
+  is free. Comments can also go in alone (side panel → YouTube tab → **Add
   comments as .md**), which stays free.
-- If YouTube changes its markup and a button doesn't appear, the popup flow
+- If YouTube changes its markup and a button doesn't appear, the side panel flow
   (extension icon → YouTube tab → Collect videos) still works.
 
 ### Links, pages and selections
 
-The popup's **Link** tab is enabled on any regular `http(s)` page:
+The **Link** tab is enabled on any regular `http(s)` page once you click the
+extension icon on it (that click is what lets the extension read the page):
 
 - **Add link** — paste a URL or a whole list, one per line (junk lines and
   duplicates are dropped); prefilled with the active tab. NotebookLM fetches
@@ -101,7 +102,7 @@ The popup's **Link** tab is enabled on any regular `http(s)` page:
   is free.
 - **Add current page** — for pages NotebookLM can't fetch. The text is read
   from the tab (`<article>`/`<main>`, else `<body>`), turned into Markdown in
-  the popup and uploaded through the same path as JSON. Markdown rather than
+  the side panel and uploaded through the same path as JSON. Markdown rather than
   PDF on purpose: a browser-made PDF is a picture of the page with no text
   layer, which is a worse source than the text.
 - **Selected text** — select, right-click, **"Add selection to Notebook"**,
@@ -170,7 +171,7 @@ what makes reconciliation possible.
 Preview warns before you hit Upload — too many files, a suspiciously large
 file, empty content.
 
-All files travel from the popup to the content script in a single
+All files travel from the side panel to the content script in a single
 `chrome.tabs.sendMessage`, and upload in batches of 10. For very large
 exports that message gets big; messaging holds up to tens of MB in practice,
 but if Upload doesn't start on a giant JSON with no error in Preview, lower
@@ -186,10 +187,10 @@ together with its child pages; the count resets on the 1st.
 
 **Pro** — the same bulk actions, unmetered. One-time purchase, **not a
 subscription**: pay once, keep the license. Sold through Polar, which is the
-merchant of record; the "Get Pro" button in the popup opens the checkout with
+merchant of record; the "Get Pro" button in the side panel opens the checkout with
 the current price.
 
-To activate, paste the license key into the popup. The extension calls Polar's
+To activate, paste the license key into the side panel. The extension calls Polar's
 public license API directly from your browser — no account, no sign-in, just
 the key. Moving to another browser: deactivate on the old device first
 to free the slot.
@@ -202,7 +203,7 @@ Offline use is unaffected.
 ## Privacy
 
 JSON is parsed and split into Markdown entirely in the browser, inside the
-popup. Data leaves the extension only toward
+side panel. Data leaves the extension only toward
 `notebooklm.google.com`/`notebook.google.com` — the service you're already
 signed into — and only after an explicit click. A Notion page is read on
 `app.notion.com` only when you press the button there, via Notion's own export
@@ -281,7 +282,7 @@ npx tsc --noEmit
 npm run lint       # oxlint --type-aware (tsgolint)
 ```
 
-Five entry points build into `dist/`: `popup.ts`, `uploader.ts` →
+Five entry points build into `dist/`: `popup.ts` (the side panel page), `uploader.ts` →
 `dist/content.js`, `youtube.ts`, `notion.ts`, `background.ts`. Minification is off on
 purpose — Chrome Web Store review requires that functionality be discernible
 from the submitted code.

@@ -114,6 +114,9 @@ const tabUrl = el<HTMLButtonElement>('tab-url');
 
 let settings: Settings = DEFAULT_SETTINGS;
 let lastPreview: PreviewResult | null = null;
+// Notebook the incremental preview deduplicated against; the side panel lets
+// the user switch tabs between Preview and Upload.
+let previewNotebookId: string | null = null;
 let currentTabId: number | null = null;
 
 // ---- settings <-> form ---------------------------------------------------
@@ -184,19 +187,16 @@ const dropzoneLabel = document.querySelector<HTMLLabelElement>('.dropzone');
 const fileNameLabel = el<HTMLSpanElement>('file-name');
 const fileMetaLabel = el<HTMLSpanElement>('file-meta');
 
-// Chrome 152+ on macOS destroys the action popup when it loses focus to the
-// native file dialog, so `change` never fires (DECISIONS.md #20). Drag & drop
-// still works there, so the dropzone becomes drag-only.
-// ponytail: open-ended range, cap it at the fixed Chrome version once Chromium ships a fix.
-function filePickerClosesPopup(ua: string): boolean {
-  return /Macintosh/.test(ua) && Number(/Chrome\/(\d+)/.exec(ua)?.[1] ?? 0) >= 152;
+// A side panel is not a tab, so Chromium resolves `currentWindow` for it to
+// the last focused browser window — another window after a drag from Finder.
+// The panel opens on an icon click in its own window, so pin that window at load.
+const panelWindowId = chrome.windows.getCurrent().then((w) => w.id);
+async function activeTabInPanelWindow(): Promise<chrome.tabs.Tab[]> {
+  return chrome.tabs.query({ active: true, windowId: await panelWindowId });
 }
-const dragOnly = filePickerClosesPopup(navigator.userAgent);
-const idleFileText = dragOnly
-  ? 'Drag & drop a .json file or Telegram .html export here'
-  : 'Choose a .json file or Telegram .html export';
+
+const idleFileText = 'Choose a .json file or Telegram .html export';
 fileNameLabel.textContent = idleFileText;
-if (dragOnly) dropzoneLabel?.addEventListener('click', (e) => e.preventDefault());
 
 jsonFile.addEventListener('change', () => {
   const files = [...(jsonFile.files ?? [])];
@@ -291,6 +291,7 @@ function renderPreview(result: PreviewResult): void {
 btnPreview.addEventListener('click', async () => {
   clearError();
   lastPreview = null;
+  previewNotebookId = null;
   btnUpload.disabled = true;
 
   const files = [...(jsonFile.files ?? [])];
@@ -357,8 +358,9 @@ btnPreview.addEventListener('click', async () => {
     const notes: string[] = [];
 
     if (settings.incremental) {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const [tab] = await activeTabInPanelWindow();
       const notebookId = tab?.url ? extractNotebookId(tab.url) : null;
+      previewNotebookId = notebookId;
       if (!notebookId) {
         notes.push('No notebook open in the active tab — showing all files');
       } else {
@@ -422,7 +424,7 @@ btnUpload.addEventListener('click', async () => {
   clearError();
   resetUploadUi();
 
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const [tab] = await activeTabInPanelWindow();
   if (!tab?.id) {
     showError('Could not determine the active tab');
     return;
@@ -437,6 +439,12 @@ btnUpload.addEventListener('click', async () => {
   }
   if (!extractNotebookId(tab.url)) {
     showError('Open a specific notebook, not the notebook list');
+    return;
+  }
+  if (previewNotebookId && previewNotebookId !== extractNotebookId(tab.url)) {
+    lastPreview = null;
+    btnUpload.disabled = true;
+    showError('The active notebook changed since Preview — run Preview again');
     return;
   }
   currentTabId = tab.id;
@@ -1015,8 +1023,10 @@ async function readFixQueue(): Promise<FixEntry[]> {
 // exists once loadNotebookList has rendered.
 async function loadPendingFix(tabUrl: string, listReady: Promise<void>): Promise<void> {
   const target = normalizeUrl(tabUrl);
+  const gen = initGen;
   const entry = (await readFixQueue()).find((e) => normalizeUrl(e.url) === target);
-  if (!entry) return;
+  // A tab switch during the read started a newer init; this tab is stale.
+  if (!entry || gen !== initGen) return;
 
   pendingFix = entry;
   urlFixBanner.textContent = `“${entry.title}” is a broken source in the notebook — “Add page as .md” will replace it.`;
@@ -1043,14 +1053,19 @@ btnAddPage.addEventListener('click', async () => {
   // Only replace when the capture is actually going back into the notebook
   // the broken source lives in — the user is free to re-point the picker,
   // and that must not delete a source from a notebook we're not adding to.
-  const replaceSourceId =
-    pendingFix && target.targetNotebookId === pendingFix.notebookId ? pendingFix.sourceId : undefined;
-
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  // And only for the broken page itself — the panel outlives tab switches.
+  const [tab] = await activeTabInPanelWindow();
   if (!tab?.id) {
     showUrlError('Could not determine the active tab');
     return;
   }
+  const replaceSourceId =
+    pendingFix &&
+    target.targetNotebookId === pendingFix.notebookId &&
+    tab.url &&
+    normalizeUrl(tab.url) === normalizeUrl(pendingFix.url)
+      ? pendingFix.sourceId
+      : undefined;
 
   let captured: { title: string; url: string; text: string };
   try {
@@ -1060,7 +1075,14 @@ btnAddPage.addEventListener('click', async () => {
     }
     captured = injection.result;
   } catch (err) {
-    showUrlError(`Could not capture the page: ${err instanceof Error ? err.message : String(err)}`);
+    // activeTab is granted per tab on an icon click and revoked on navigation;
+    // the side panel outlives both, so the grant may be missing here.
+    const msg = err instanceof Error ? err.message : String(err);
+    showUrlError(
+      /permission|Cannot access/i.test(msg)
+        ? 'Click the Source LM icon on this tab to allow reading it'
+        : `Could not capture the page: ${msg}`,
+    );
     return;
   }
 
@@ -1085,8 +1107,11 @@ btnAddPage.addEventListener('click', async () => {
   await submitJob(job, urlNotebookSelect, urlStatus);
 });
 
-async function initFromActiveTab(): Promise<void> {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+let lastAutoUrl = '';
+let initGen = 0;
+async function initFromActiveTab(firstRun = false): Promise<void> {
+  initGen++;
+  const [tab] = await activeTabInPanelWindow();
 
   const onNotebookLm = !!tab?.url && NOTEBOOKLM_ORIGINS.some((origin) => tab.url!.startsWith(origin));
   if (onNotebookLm && extractNotebookId(tab!.url!)) {
@@ -1112,12 +1137,19 @@ async function initFromActiveTab(): Promise<void> {
   sectionUrl.hidden = !onOther;
   urlUnavailable.hidden = onOther;
   tabUrl.disabled = !onOther;
-  if (onOther) urlInput.value = tab!.url!;
+  // Re-runs on every tab switch: drop the previous tab's fix banner, and only
+  // replace the URL field while it still holds what we filled in.
+  pendingFix = null;
+  urlFixBanner.hidden = true;
+  if (onOther && (urlInput.value === '' || urlInput.value === lastAutoUrl)) {
+    urlInput.value = lastAutoUrl = tab!.url!;
+  }
 
   if (!onYoutube && !onOther) return;
 
   if (onYoutube) youtubeTabId = tab!.id!;
-  selectTab(onYoutube ? 'panel-youtube' : 'panel-url');
+  // Only on open: re-runs on tab switches must not yank the user off their tab.
+  if (firstRun) selectTab(onYoutube ? 'panel-youtube' : 'panel-url');
   const listReady = loadNotebookList();
   if (onOther) void loadPendingFix(tab!.url!, listReady);
 
@@ -1284,6 +1316,17 @@ void loadSettings().then((loaded) => {
   applySettingsToForm(settings);
 });
 
-void initFromActiveTab();
+void initFromActiveTab(true);
+// The side panel stays open across tab switches and navigations.
+chrome.tabs.onActivated.addListener(async ({ windowId }) => {
+  if (windowId === (await panelWindowId)) void initFromActiveTab();
+});
+// An icon click with the panel open grants activeTab, which reveals the URL.
+chrome.runtime.onMessage.addListener((message: { type?: string }) => {
+  if (message?.type === 'ACTIVE_TAB_GRANTED') void initFromActiveTab();
+});
+chrome.tabs.onUpdated.addListener(async (_id, info, tab) => {
+  if (tab.active && info.status === 'complete' && tab.windowId === (await panelWindowId)) void initFromActiveTab();
+});
 void refreshPlanBadge();
 void refreshReviewBar();

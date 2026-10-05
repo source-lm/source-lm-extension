@@ -529,21 +529,29 @@ the code looks the way it does, not at a style preference.
     after its own 3 successful runs, which is acceptable for something this
     low-stakes.
 
-20. **The popup's file picker is disabled on macOS Chrome 152+; the
-    dropzone is drag-only there.** Since Chrome 152 (works in 151) macOS
-    destroys the action popup when it loses focus to the native file
-    dialog, so the `<input type="file">` `change` never fires. With popup
-    DevTools open it works, because DevTools turns off close-on-blur —
-    do not "verify a fix" that way. `filePickerClosesPopup()` in
-    `popup.ts` matches `Macintosh` + `Chrome/N >= 152` (Edge shares the
-    engine), swaps the dropzone text to "Drag & drop … here" and makes a click
-    a no-op instead of opening the dialog; drag & drop is unchanged.
-    Tried and failed: `showOpenFilePicker` (same blur close), stashing
-    picked files in IndexedDB (the popup is gone before any handler
-    runs). Rejected: opening the picker in a detached window (UX cost for
-    every upload). Deferred: moving the UI to the side panel. Do not
-    re-enable the picker until a Chromium fix is verified without
-    DevTools open; then cap the version range in the helper.
+20. **The UI is a side panel, not an action popup.** Since Chromium 152
+    (Chrome and Edge, works in 151) macOS destroys the action popup the
+    moment it loses focus: to the native file dialog (`change` never
+    fires) and, under Stage Manager, when a file dragged from Finder is
+    hovered over the browser's stage thumbnail. v1.1.4 made the dropzone
+    drag-only; Stage Manager killed that too, and nothing inside a popup
+    can survive it. The side panel belongs to the browser window and has
+    no close-on-blur, so `manifest.json` declares `side_panel` (the same
+    `src/popup/popup.html`) and `background.ts` opens it from
+    `action.onClicked` — still one click on the icon. Not
+    `openPanelOnActionClick`: `onClicked` is what reliably grants activeTab,
+    and a click with the panel open must re-grant for the new tab instead
+    of toggling the panel shut. Consequences: the page outlives the tab it
+    was opened on, so `initFromActiveTab()` re-runs on
+    `tabs.onActivated`/`onUpdated` and on `ACTIVE_TAB_GRANTED` from the
+    worker; on an arbitrary site the URL (Link tab, "Add this page") is
+    visible only after an icon click on that tab, and the hint says so —
+    no broad host permission or `tabs` is added for it. `currentWindow`
+    from a side panel resolves to the last focused window, so the panel
+    pins its own window id at load (`activeTabInPanelWindow()`). Popup DevTools
+    hid the bug (it disables close-on-blur) — do not verify such fixes
+    with DevTools open. Rejected: a detached `windows.create` window, and
+    a popup button that opens the panel (two clicks).
 
 ## NotebookLM limits (warning logic in Preview)
 

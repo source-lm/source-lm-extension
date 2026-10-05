@@ -94,6 +94,16 @@ async function openNotebookTab(url: string): Promise<void> {
 
 // All five listeners are registered at the top level: a worker woken up by
 // an event must have its handlers attached before the event is dispatched.
+// The UI is a side panel, not an action popup (DECISIONS.md #20). It is opened
+// from action.onClicked rather than openPanelOnActionClick: that event is what
+// reliably grants activeTab for the clicked tab, and a click with the panel
+// already open must re-grant (not toggle it shut) after a tab switch. The
+// behaviour flag persists in the profile, so it is reset explicitly.
+void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false });
+chrome.action.onClicked.addListener((tab) => {
+  void chrome.sidePanel.open({ windowId: tab.windowId });
+  chrome.runtime.sendMessage({ type: 'ACTIVE_TAB_GRANTED' }).catch(() => {});
+});
 chrome.runtime.onInstalled.addListener(buildMenus);
 chrome.runtime.onStartup.addListener(buildMenus);
 chrome.storage.onChanged.addListener((changes, areaName) => {

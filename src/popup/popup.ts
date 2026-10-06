@@ -66,6 +66,8 @@ const contentFieldsInput = el<HTMLInputElement>('content_fields');
 const metadataCheckbox = el<HTMLInputElement>('metadata');
 const incrementalCheckbox = el<HTMLInputElement>('incremental');
 const btnReset = el<HTMLButtonElement>('btn-reset');
+const viewModeSelect = el<HTMLSelectElement>('view-mode');
+const btnViewMode = el<HTMLButtonElement>('btn-view-mode');
 
 const previewSummary = el<HTMLDivElement>('preview-summary');
 const previewFiles = el<HTMLUListElement>('preview-files');
@@ -132,6 +134,7 @@ function applySettingsToForm(s: Settings): void {
   contentFieldsInput.value = Array.isArray(s.content_fields) ? s.content_fields.join(', ') : s.content_fields;
   metadataCheckbox.checked = s.metadata;
   incrementalCheckbox.checked = s.incremental;
+  viewModeSelect.value = s.view_mode;
 }
 
 function readSettingsFromForm(): Settings {
@@ -151,6 +154,7 @@ function readSettingsFromForm(): Settings {
     // time (see the `source_name: sourceName` override below). Kept empty so
     // a manual override saved by an older version doesn't linger in storage.
     source_name: '',
+    view_mode: viewModeSelect.value === 'popup' ? 'popup' : 'sidebar',
   };
 }
 
@@ -176,7 +180,7 @@ for (const input of [
 }
 
 btnReset.addEventListener('click', () => {
-  settings = { ...DEFAULT_SETTINGS };
+  settings = { ...DEFAULT_SETTINGS, view_mode: settings.view_mode };
   applySettingsToForm(settings);
   void saveSettings(settings);
 });
@@ -191,12 +195,61 @@ const fileMetaLabel = el<HTMLSpanElement>('file-meta');
 // the last focused browser window — another window after a drag from Finder.
 // The panel opens on an icon click in its own window, so pin that window at load.
 const panelWindowId = chrome.windows.getCurrent().then((w) => w.id);
+// Resolved copy for switchView(), which cannot await inside a user gesture.
+let panelWindowIdNow: number | undefined;
+void panelWindowId.then((id) => (panelWindowIdNow = id));
 async function activeTabInPanelWindow(): Promise<chrome.tabs.Tab[]> {
   return chrome.tabs.query({ active: true, windowId: await panelWindowId });
 }
 
-const idleFileText = 'Choose a .json file or Telegram .html export';
+// ---- view mode (DECISIONS.md #20) -------------------------------------------
+
+// The same page is the side panel and, with `?popup`, the action popup.
+const isPopup = new URLSearchParams(location.search).has('popup');
+document.body.classList.toggle('popup', isPopup);
+btnViewMode.setAttribute('aria-label', isPopup ? 'Switch to sidebar mode' : 'Switch to popup mode');
+
+// sidePanel.open and openPopup need the user gesture, so nothing is awaited
+// before them. The stored settings are re-read: `settings` may still be the
+// defaults if the click beats the initial load, and saving those would wipe
+// the user's.
+function switchView(target: 'sidebar' | 'popup'): void {
+  // Not resolved yet (click within ms of load): save the mode, stay open.
+  const opened = target === 'popup' || panelWindowIdNow !== undefined;
+  if (target === 'sidebar') {
+    if (opened) void chrome.sidePanel.open({ windowId: panelWindowIdNow! });
+  } else {
+    void chrome.action.setPopup({ popup: 'src/popup/popup.html?popup' });
+    chrome.action.openPopup().catch(() => {});
+  }
+  void loadSettings()
+    .then((s) => saveSettings((settings = { ...s, view_mode: target })))
+    .then(() => {
+      if (opened) window.close();
+    })
+    .catch(() => {});
+}
+btnViewMode.addEventListener('click', () => switchView(isPopup ? 'sidebar' : 'popup'));
+viewModeSelect.addEventListener('change', () => {
+  const target = viewModeSelect.value === 'popup' ? 'popup' : 'sidebar';
+  if ((target === 'popup') !== isPopup) switchView(target);
+});
+
+// In the popup the file dialog would destroy the page (Chrome 152+ on macOS),
+// so the dropzone is drag-only: the first click shows a hint, the second
+// switches to the side panel.
+const dropzoneHint = el<HTMLSpanElement>('dropzone-hint');
+const idleFileText = isPopup
+  ? 'Drag & drop a .json file or Telegram .html export here'
+  : 'Choose a .json file or Telegram .html export';
 fileNameLabel.textContent = idleFileText;
+if (isPopup) {
+  dropzoneLabel?.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (dropzoneHint.hidden) dropzoneHint.hidden = false;
+    else switchView('sidebar');
+  });
+}
 
 jsonFile.addEventListener('change', () => {
   const files = [...(jsonFile.files ?? [])];

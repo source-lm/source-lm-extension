@@ -104,10 +104,25 @@ chrome.action.onClicked.addListener((tab) => {
   void chrome.sidePanel.open({ windowId: tab.windowId });
   chrome.runtime.sendMessage({ type: 'ACTIVE_TAB_GRANTED' }).catch(() => {});
 });
+// With a popup set, action.onClicked does not fire and the icon opens the
+// popup instead — the opt-in view mode (DECISIONS.md #20).
+// Chained like buildMenus so an older read never lands last.
+let applyingViewMode = Promise.resolve();
+function applyViewMode(): void {
+  applyingViewMode = applyingViewMode
+    .then(async () => {
+      const { settings } = (await chrome.storage.sync.get('settings')) as { settings?: { view_mode?: string } };
+      await chrome.action.setPopup({ popup: settings?.view_mode === 'popup' ? 'src/popup/popup.html?popup' : '' });
+    })
+    .catch(() => {});
+}
 chrome.runtime.onInstalled.addListener(buildMenus);
 chrome.runtime.onStartup.addListener(buildMenus);
+chrome.runtime.onInstalled.addListener(applyViewMode);
+chrome.runtime.onStartup.addListener(applyViewMode);
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName === 'local' && 'notebookCache' in changes) buildMenus();
+  if (areaName === 'sync' && 'settings' in changes) applyViewMode();
 });
 chrome.runtime.onMessage.addListener((message: { type?: string; url?: string }, sender, sendResponse) => {
   if (sender.id !== chrome.runtime.id || message?.type !== 'OPEN_NOTEBOOK') return undefined;

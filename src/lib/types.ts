@@ -5,6 +5,7 @@ export interface Settings {
   filename_pattern: string;     // placeholders {index} {title_slug} {cursor} {source}
   incremental: boolean;         // don't upload what's already in the notebook (checked by source names)
   source_name: string;          // manual override, empty = auto from JSON
+  view_mode: 'sidebar' | 'popup'; // where the icon opens the UI (DECISIONS.md #20)
 }
 
 export interface OutFile {

@@ -11,6 +11,7 @@ export const DEFAULT_SETTINGS: Settings = {
   filename_pattern: '{source}-{index}-{cursor}-{title_slug}.md',
   incremental: true,
   source_name: '',
+  view_mode: 'sidebar',
 };
 
 function getChromeStorage(): any {

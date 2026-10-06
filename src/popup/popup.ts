@@ -225,7 +225,10 @@ function switchView(target: 'sidebar' | 'popup'): void {
   void loadSettings()
     .then((s) => saveSettings((settings = { ...s, view_mode: target })))
     .then(() => {
-      if (opened) window.close();
+      if (!opened) return;
+      // Edge ignores window.close() in a side panel.
+      if (isPopup) window.close();
+      else chrome.sidePanel.close({ windowId: panelWindowIdNow! }).catch(() => window.close());
     })
     .catch(() => {});
 }
@@ -1364,9 +1367,14 @@ void chrome.storage.local.get('youtubeJob').then(({ youtubeJob }) => {
   if (Date.now() - createdAt > 5 * 60 * 1000) void chrome.storage.local.remove('youtubeJob');
 });
 
+// The surface this page opened in is the current mode. switchView's save can
+// be lost when Edge destroys the popup before it lands, so the new surface
+// persists it too.
 void loadSettings().then((loaded) => {
-  settings = loaded;
+  const view_mode = isPopup ? 'popup' : 'sidebar';
+  settings = { ...loaded, view_mode };
   applySettingsToForm(settings);
+  if (loaded.view_mode !== view_mode) void saveSettings(settings);
 });
 
 void initFromActiveTab(true);

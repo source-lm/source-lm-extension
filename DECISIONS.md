@@ -214,8 +214,10 @@ the code looks the way it does, not at a style preference.
    `typescript`, `@types/chrome`, `oxlint` + `oxlint-tsgolint` (the
    only type-aware linter that runs on TS 7; typescript-eslint refuses it). React is deliberately not used — the
    popup is one form.
-8. `popup.html` loads `../../dist/popup.js` because `default_popup`
-   points at `src/popup/popup.html`, while `dist/` sits at the root.
+8. `popup.html` loads `../../dist/popup.js` because the page — served as
+   `side_panel.default_path` and, in popup view mode, via
+   `action.setPopup('src/popup/popup.html?popup')` — lives in
+   `src/popup/`, while `dist/` sits at the root.
 9. **The RPC path is primary, the DOM path is a fallback — neither may
    be removed.** `uploader.ts:runUpload` first tries
    `uploadFileViaRpc` (private `batchexecute`, `rpc.ts`); on the first
@@ -551,7 +553,16 @@ the code looks the way it does, not at a style preference.
     pins its own window id at load (`activeTabInPanelWindow()`). Popup DevTools
     hid the bug (it disables close-on-blur) — do not verify such fixes
     with DevTools open. Rejected: a detached `windows.create` window, and
-    a popup button that opens the panel (two clicks).
+    a popup button that opens the panel as the default (two clicks).
+
+    Optional popup mode: `Settings.view_mode` (`'sidebar'` default |
+    `'popup'`, storage.sync) is applied by `background.ts:applyViewMode()`
+    through `action.setPopup`; with a popup set `action.onClicked` does not
+    fire, so the side panel opener stays untouched. The page detects the
+    mode from `?popup`, takes the v1.1.4 fixed 412x600 size, and its
+    dropzone is drag-only: the first click shows a hint, the second
+    switches to the side panel (`switchView`). The header button and the
+    Settings select toggle the mode.
 
 ## NotebookLM limits (warning logic in Preview)
 

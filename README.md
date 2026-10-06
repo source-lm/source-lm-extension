@@ -66,6 +66,9 @@ this folder.
    warnings → **Upload to Notebook**.
 
 Progress, errors and confirmations show up in the side panel while it runs.
+Prefer a classic popup? Switch **View mode** in Settings (or use the header
+button); the popup takes drag-and-drop only, the side panel also has the
+file dialog.
 
 ### YouTube
 

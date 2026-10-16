@@ -42,6 +42,19 @@ const MARKER = '[data-source-lm-notion-btn]';
 // nothing may read `location` at import time.
 const publicSite = (): boolean => location.hostname.endsWith('.notion.site');
 
+// A published site's root URL (`x.notion.site/`) carries no page id, so there
+// the id comes from the page's own title block — the one `.notion-page-block`
+// outside `.notion-page-content` (child-page links sit inside it). Live DOM,
+// 2026-10-16.
+function currentPageId(): string | null {
+  const id = notionPageId(location.href);
+  if (id || !publicSite()) return id;
+  const own = [...document.querySelectorAll<HTMLElement>('.notion-page-block[data-block-id]')].find(
+    (el) => !el.closest('.notion-page-content'),
+  );
+  return own?.dataset.blockId ?? null;
+}
+
 // ---- export through Notion's own endpoint ---------------------------------
 
 const POLL_MS = 1500;
@@ -458,7 +471,7 @@ function findPublicTopbarAnchor(): Anchor | null {
 function ensureButton(): void {
   // No page id means login, onboarding, the home/inbox views — nothing to
   // export, and a button there would only ever error.
-  if (!notionPageId(location.href)) {
+  if (!currentPageId()) {
     for (const el of document.querySelectorAll(MARKER)) el.remove();
     return;
   }
@@ -493,7 +506,7 @@ function ensureButton(): void {
     btn.style.setProperty(prop, value, 'important');
   }
   btn.addEventListener('click', () => {
-    const pageId = notionPageId(location.href);
+    const pageId = currentPageId();
     if (pageId) void openNotionDialog(pageId);
   });
 

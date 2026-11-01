@@ -16,7 +16,7 @@
     "@types/chrome": "^0.3.5",
     "esbuild": "^0.28.2",
     "oxlint": "^1.88.0",
-    "oxlint-tsgolint": "^7.0.2004",
+    "oxlint-tsgolint": "^7.0.2005",
     "typescript": "^7.0.2"
   }
 }
